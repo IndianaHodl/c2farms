@@ -11,9 +11,15 @@ import api from '../services/api';
 export default function Accounting() {
   const { currentFarm, fiscalYear } = useFarm();
   const [summary, setSummary] = useState({});
+  const [months, setMonths] = useState(null);
   const [syncMessage, setSyncMessage] = useState('');
   const [syncing, setSyncing] = useState(false);
   const [refreshKey, setRefreshKey] = useState(0);
+
+  const handleSummaryLoaded = (newSummary, newMonths) => {
+    setSummary(newSummary);
+    if (newMonths) setMonths(newMonths);
+  };
 
   const handleQBSync = async () => {
     setSyncing(true);
@@ -81,9 +87,9 @@ export default function Accounting() {
         farmId={currentFarm.id}
         fiscalYear={fiscalYear}
         key={refreshKey}
-        onSummaryLoaded={setSummary}
+        onSummaryLoaded={handleSummaryLoaded}
       />
-      <CashFlowSummary summary={summary} />
+      <CashFlowSummary summary={summary} months={months} />
     </Box>
   );
 }

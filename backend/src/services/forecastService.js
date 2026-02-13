@@ -1,10 +1,19 @@
 import prisma from '../config/database.js';
-import { FISCAL_MONTHS, fiscalMonthIndex, getCurrentFiscalMonth } from '../utils/fiscalYear.js';
+import { generateFiscalMonths, fiscalMonthIndex, getCurrentFiscalMonth } from '../utils/fiscalYear.js';
 import { LEAF_CATEGORIES, PARENT_CATEGORIES, getChildrenCodes } from '../utils/categories.js';
 
-export async function calculateForecast(farmId, fiscalYear) {
-  const { fiscalYear: currentFY, monthName: currentMonth } = getCurrentFiscalMonth();
-  const currentMonthIdx = fiscalMonthIndex(currentMonth);
+export async function calculateForecast(farmId, fiscalYear, startMonth) {
+  // Look up startMonth from assumption if not provided
+  if (!startMonth) {
+    const assumption = await prisma.assumption.findUnique({
+      where: { farm_id_fiscal_year: { farm_id: farmId, fiscal_year: fiscalYear } },
+    });
+    startMonth = assumption?.start_month || 'Nov';
+  }
+
+  const months = generateFiscalMonths(startMonth);
+  const { fiscalYear: currentFY, monthName: currentMonth } = getCurrentFiscalMonth(startMonth);
+  const currentMonthIdx = fiscalMonthIndex(currentMonth, startMonth);
 
   // Fetch all monthly data for this year
   const monthlyData = await prisma.monthlyData.findMany({
@@ -36,8 +45,8 @@ export async function calculateForecast(farmId, fiscalYear) {
     let frozenBudgetTotal = 0;
     const monthValues = {};
 
-    for (let i = 0; i < FISCAL_MONTHS.length; i++) {
-      const month = FISCAL_MONTHS[i];
+    for (let i = 0; i < months.length; i++) {
+      const month = months[i];
       const monthData = monthlyMap[month];
       const frozenMonth = frozenMap[month] || {};
       const frozenVal = frozenMonth[code] || 0;
@@ -86,7 +95,7 @@ export async function calculateForecast(farmId, fiscalYear) {
     let frozenBudgetTotal = 0;
     const monthValues = {};
 
-    for (const month of FISCAL_MONTHS) {
+    for (const month of months) {
       let monthSum = 0;
       for (const childCode of childCodes) {
         monthSum += result[childCode]?.monthValues?.[month] || 0;

@@ -5,9 +5,11 @@ import { getGridColors } from '../../utils/gridColors';
 import { FISCAL_MONTHS } from '../../utils/fiscalYear';
 import { formatCurrency } from '../../utils/formatting';
 
-export default function CashFlowSummary({ summary }) {
+export default function CashFlowSummary({ summary, months }) {
   const { mode } = useThemeMode();
   const colors = useMemo(() => getGridColors(mode), [mode]);
+
+  const displayMonths = months || FISCAL_MONTHS;
 
   if (!summary || Object.keys(summary).length === 0) return null;
 
@@ -15,7 +17,7 @@ export default function CashFlowSummary({ summary }) {
     <Box sx={{ mt: 3 }}>
       <Typography variant="h6" sx={{ mb: 2 }}>Monthly Cash Flow Summary</Typography>
       <Grid container spacing={1}>
-        {FISCAL_MONTHS.map(month => {
+        {displayMonths.map(month => {
           const s = summary[month] || {};
           const isPositive = (s.operatingIncome || 0) >= 0;
           return (

@@ -7,11 +7,13 @@ import api from '../../services/api';
 import { useRealtime } from '../../hooks/useRealtime';
 import { useThemeMode } from '../../contexts/ThemeContext';
 import { getGridColors } from '../../utils/gridColors';
-import { FISCAL_MONTHS, isFutureMonth } from '../../utils/fiscalYear';
+import { FISCAL_MONTHS, isPastMonth } from '../../utils/fiscalYear';
 import { formatNumber, formatPercent } from '../../utils/formatting';
 
 export default function PerUnitGrid({ farmId, fiscalYear }) {
   const [rowData, setRowData] = useState([]);
+  const [months, setMonths] = useState(FISCAL_MONTHS);
+  const [startMonth, setStartMonth] = useState('Nov');
   const [isFrozen, setIsFrozen] = useState(false);
   const [error, setError] = useState('');
   const [revenueWarning, setRevenueWarning] = useState('');
@@ -25,6 +27,8 @@ export default function PerUnitGrid({ farmId, fiscalYear }) {
       const res = await api.get(`/api/farms/${farmId}/per-unit/${fiscalYear}`);
       setRowData(res.data.rows || []);
       setIsFrozen(res.data.isFrozen || false);
+      if (res.data.months) setMonths(res.data.months);
+      if (res.data.startMonth) setStartMonth(res.data.startMonth);
     } catch (err) {
       setError('Failed to load per-unit data');
     }
@@ -49,7 +53,7 @@ export default function PerUnitGrid({ farmId, fiscalYear }) {
   const onCellValueChanged = useCallback(async (params) => {
     const { data, colDef } = params;
     const month = colDef.field?.replace('months.', '');
-    if (!month || !FISCAL_MONTHS.includes(month)) return;
+    if (!month || !months.includes(month)) return;
 
     const value = params.newValue;
     try {
@@ -62,9 +66,11 @@ export default function PerUnitGrid({ farmId, fiscalYear }) {
       setError(err.response?.data?.error || 'Failed to update cell');
       fetchData();
     }
-  }, [farmId, fiscalYear, fetchData]);
+  }, [farmId, fiscalYear, fetchData, months]);
 
   const columnDefs = useMemo(() => {
+    const isLevel0OrComputed = (params) => params.data?.level === 0 || params.data?.isComputed;
+
     const cols = [
       {
         headerName: 'Category',
@@ -72,16 +78,19 @@ export default function PerUnitGrid({ farmId, fiscalYear }) {
         pinned: 'left',
         width: 220,
         cellStyle: (params) => {
+          const style = {};
           if (params.data?.isComputed) {
             return { fontWeight: 'bold', backgroundColor: colors.computedBg, borderTop: `2px solid ${colors.computedBorder}` };
           }
           const indent = (params.data?.level || 0) * 20;
           const bold = params.data?.level === 0;
-          return {
-            paddingLeft: `${indent + 8}px`,
-            fontWeight: bold ? 'bold' : 'normal',
-            backgroundColor: bold ? colors.parentRow : undefined,
-          };
+          style.paddingLeft = `${indent + 8}px`;
+          style.fontWeight = bold ? 'bold' : 'normal';
+          if (bold) {
+            style.backgroundColor = colors.parentRow;
+            style.borderTop = `2px solid ${colors.computedBorder}`;
+          }
+          return style;
         },
       },
       {
@@ -90,11 +99,19 @@ export default function PerUnitGrid({ farmId, fiscalYear }) {
         width: 100,
         type: 'numericColumn',
         valueFormatter: (p) => formatNumber(p.value),
-        cellStyle: { backgroundColor: colors.priorYearBg, color: colors.priorYearText },
+        cellStyle: (params) => {
+          const style = { backgroundColor: colors.priorYearBg, color: colors.priorYearText };
+          if (isLevel0OrComputed(params)) {
+            style.fontWeight = 'bold';
+            style.borderTop = `2px solid ${colors.computedBorder}`;
+          }
+          return style;
+        },
       },
     ];
 
-    for (const month of FISCAL_MONTHS) {
+    for (const month of months) {
+      const past = isPastMonth(fiscalYear, month, startMonth);
       cols.push({
         headerName: month,
         field: `months.${month}`,
@@ -118,16 +135,21 @@ export default function PerUnitGrid({ farmId, fiscalYear }) {
         },
         valueFormatter: (p) => formatNumber(p.value),
         cellStyle: (params) => {
+          const style = {};
           if (params.data?.isComputed) {
-            return {
-              fontWeight: 'bold',
-              backgroundColor: colors.computedBg,
-              color: (params.value || 0) < 0 ? colors.negativeText : colors.positiveText,
-            };
+            style.fontWeight = 'bold';
+            style.backgroundColor = colors.computedBg;
+            style.color = (params.value || 0) < 0 ? colors.negativeText : colors.positiveText;
+            return style;
           }
-          const isActual = params.data?.actuals?.[month];
-          if (isActual) return { backgroundColor: colors.actualCell };
-          return {};
+          if (isLevel0OrComputed(params)) {
+            style.fontWeight = 'bold';
+            style.borderTop = `2px solid ${colors.computedBorder}`;
+          }
+          if (past) {
+            style.backgroundColor = colors.actualCell;
+          }
+          return style;
         },
       });
     }
@@ -142,6 +164,7 @@ export default function PerUnitGrid({ farmId, fiscalYear }) {
         cellStyle: (params) => ({
           backgroundColor: params.data?.isComputed ? colors.computedBg : colors.aggregateBg,
           fontWeight: 'bold',
+          borderTop: isLevel0OrComputed(params) ? `2px solid ${colors.computedBorder}` : undefined,
         }),
       },
       {
@@ -153,6 +176,7 @@ export default function PerUnitGrid({ farmId, fiscalYear }) {
         cellStyle: (params) => ({
           backgroundColor: params.data?.isComputed ? colors.computedBg : colors.forecastBg,
           fontWeight: 'bold',
+          borderTop: isLevel0OrComputed(params) ? `2px solid ${colors.computedBorder}` : undefined,
         }),
       },
       {
@@ -164,6 +188,7 @@ export default function PerUnitGrid({ farmId, fiscalYear }) {
         cellStyle: (params) => ({
           color: (params.value || 0) < 0 ? colors.negativeText : colors.positiveText,
           fontWeight: 'bold',
+          borderTop: isLevel0OrComputed(params) ? `2px solid ${colors.computedBorder}` : undefined,
         }),
       },
       {
@@ -174,12 +199,13 @@ export default function PerUnitGrid({ farmId, fiscalYear }) {
         valueFormatter: (p) => formatPercent(p.value),
         cellStyle: (params) => ({
           color: Math.abs(params.value || 0) > 10 ? colors.negativeText : colors.mutedText,
+          borderTop: isLevel0OrComputed(params) ? `2px solid ${colors.computedBorder}` : undefined,
         }),
       },
     );
 
     return cols;
-  }, [fiscalYear, colors]);
+  }, [fiscalYear, colors, months, startMonth]);
 
   const defaultColDef = useMemo(() => ({
     resizable: true,

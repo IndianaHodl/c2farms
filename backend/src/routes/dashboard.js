@@ -1,7 +1,7 @@
 import { Router } from 'express';
 import prisma from '../config/database.js';
 import { authenticate } from '../middleware/auth.js';
-import { FISCAL_MONTHS, parseYear } from '../utils/fiscalYear.js';
+import { generateFiscalMonths, parseYear } from '../utils/fiscalYear.js';
 import { calculateForecast } from '../services/forecastService.js';
 
 const router = Router();

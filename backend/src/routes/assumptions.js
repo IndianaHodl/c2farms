@@ -1,7 +1,7 @@
 import { Router } from 'express';
 import prisma from '../config/database.js';
 import { authenticate } from '../middleware/auth.js';
-import { FISCAL_MONTHS, parseYear } from '../utils/fiscalYear.js';
+import { generateFiscalMonths, CALENDAR_MONTHS, parseYear } from '../utils/fiscalYear.js';
 import { LEAF_CATEGORIES } from '../utils/categories.js';
 
 const router = Router();
@@ -46,6 +46,12 @@ router.post('/:farmId/assumptions', authenticate, async (req, res, next) => {
     const fy = parseInt(fiscal_year);
     const newAcres = parseFloat(total_acres);
 
+    // Auto-compute end_month from start_month (month before start)
+    const sm = start_month || 'Nov';
+    const smIdx = CALENDAR_MONTHS.indexOf(sm);
+    const computedEndMonth = CALENDAR_MONTHS[(smIdx + 11) % 12]; // month before start
+    const fiscalMonths = generateFiscalMonths(sm);
+
     // Check if total_acres changed (for recalculation)
     const existingAssumption = await prisma.assumption.findUnique({
       where: { farm_id_fiscal_year: { farm_id: farmId, fiscal_year: fy } },
@@ -55,8 +61,8 @@ router.post('/:farmId/assumptions', authenticate, async (req, res, next) => {
     const assumption = await prisma.assumption.upsert({
       where: { farm_id_fiscal_year: { farm_id: farmId, fiscal_year: fy } },
       update: {
-        start_month: start_month || 'Nov',
-        end_month: end_month || 'Oct',
+        start_month: sm,
+        end_month: computedEndMonth,
         total_acres: newAcres,
         crops_json: crops || [],
         bins_json: bins || [],
@@ -64,8 +70,8 @@ router.post('/:farmId/assumptions', authenticate, async (req, res, next) => {
       create: {
         farm_id: farmId,
         fiscal_year: fy,
-        start_month: start_month || 'Nov',
-        end_month: end_month || 'Oct',
+        start_month: sm,
+        end_month: computedEndMonth,
         total_acres: newAcres,
         crops_json: crops || [],
         bins_json: bins || [],
@@ -73,7 +79,7 @@ router.post('/:farmId/assumptions', authenticate, async (req, res, next) => {
     });
 
     // Initialize monthly_data rows for all 12 months if they don't exist
-    for (const month of FISCAL_MONTHS) {
+    for (const month of fiscalMonths) {
       for (const type of ['per_unit', 'accounting']) {
         await prisma.monthlyData.upsert({
           where: {

@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { Box, TextField, Button, Alert, Chip } from '@mui/material';
+import { Box, TextField, Button, Alert, Chip, FormControl, InputLabel, Select, MenuItem } from '@mui/material';
 import LockIcon from '@mui/icons-material/Lock';
 import SaveIcon from '@mui/icons-material/Save';
 import AcUnitIcon from '@mui/icons-material/AcUnit';
@@ -13,6 +13,7 @@ import UnfreezeDialog from './UnfreezeDialog';
 import AddFarmDialog from './AddFarmDialog';
 import DeleteFarmDialog from './DeleteFarmDialog';
 import { validateAssumptions } from '../../utils/validation';
+import { CALENDAR_MONTHS } from '../../utils/fiscalYear';
 import { useFarm } from '../../contexts/FarmContext';
 import api from '../../services/api';
 
@@ -20,6 +21,7 @@ export default function AssumptionsForm({ farmId, fiscalYear }) {
   const { currentFarm, refreshFarms } = useFarm();
   const [data, setData] = useState({
     fiscal_year: fiscalYear,
+    start_month: 'Nov',
     total_acres: 0,
     crops: [],
     bins: [],
@@ -47,6 +49,7 @@ export default function AssumptionsForm({ farmId, fiscalYear }) {
       .then(res => {
         setData({
           fiscal_year: res.data.fiscal_year,
+          start_month: res.data.start_month || 'Nov',
           total_acres: res.data.total_acres,
           crops: res.data.crops_json || [],
           bins: res.data.bins_json || [],
@@ -54,7 +57,7 @@ export default function AssumptionsForm({ farmId, fiscalYear }) {
         setIsFrozen(res.data.is_frozen);
       })
       .catch(() => {
-        setData({ fiscal_year: fiscalYear, total_acres: 0, crops: [], bins: [] });
+        setData({ fiscal_year: fiscalYear, start_month: 'Nov', total_acres: 0, crops: [], bins: [] });
         setIsFrozen(false);
       })
       .finally(() => setLoading(false));
@@ -141,6 +144,18 @@ export default function AssumptionsForm({ farmId, fiscalYear }) {
           disabled
           size="small"
         />
+        <FormControl size="small" sx={{ minWidth: 120 }} disabled={isFrozen}>
+          <InputLabel>Start Month</InputLabel>
+          <Select
+            value={data.start_month || 'Nov'}
+            label="Start Month"
+            onChange={(e) => setData({ ...data, start_month: e.target.value })}
+          >
+            {CALENDAR_MONTHS.map(m => (
+              <MenuItem key={m} value={m}>{m}</MenuItem>
+            ))}
+          </Select>
+        </FormControl>
         <TextField
           label="Total Acres"
           type="number"

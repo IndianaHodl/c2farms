@@ -1,6 +1,6 @@
 import ExcelJS from 'exceljs';
 import prisma from '../config/database.js';
-import { FISCAL_MONTHS } from '../utils/fiscalYear.js';
+import { generateFiscalMonths } from '../utils/fiscalYear.js';
 import { CATEGORY_HIERARCHY } from '../utils/categories.js';
 
 export async function generateExcel(farmId, fiscalYear) {
@@ -12,6 +12,7 @@ export async function generateExcel(farmId, fiscalYear) {
   });
 
   const farm = await prisma.farm.findUnique({ where: { id: farmId } });
+  const months = generateFiscalMonths(assumption?.start_month || 'Nov');
 
   // Sheet 1: Per-Unit
   const perUnitSheet = workbook.addWorksheet('Per-Unit Analysis');
@@ -25,7 +26,7 @@ export async function generateExcel(farmId, fiscalYear) {
   }
 
   // Header row
-  const headerRow = ['Category', ...FISCAL_MONTHS, 'Total'];
+  const headerRow = ['Category', ...months, 'Total'];
   perUnitSheet.addRow(headerRow);
   perUnitSheet.getRow(1).font = { bold: true };
 
@@ -33,7 +34,7 @@ export async function generateExcel(farmId, fiscalYear) {
     const indent = '  '.repeat(cat.level);
     const row = [`${indent}${cat.display_name}`];
     let total = 0;
-    for (const month of FISCAL_MONTHS) {
+    for (const month of months) {
       const val = perUnitMap[month]?.[cat.code] || 0;
       row.push(val);
       total += val;
@@ -65,7 +66,7 @@ export async function generateExcel(farmId, fiscalYear) {
     const indent = '  '.repeat(cat.level);
     const row = [`${indent}${cat.display_name}`];
     let total = 0;
-    for (const month of FISCAL_MONTHS) {
+    for (const month of months) {
       const val = accountingMap[month]?.[cat.code] || 0;
       row.push(val);
       total += val;
@@ -105,7 +106,7 @@ export async function generateExcel(farmId, fiscalYear) {
   for (const sheet of [perUnitSheet, accountingSheet]) {
     sheet.eachRow((row, rowNum) => {
       if (rowNum === 1) return;
-      for (let col = 2; col <= FISCAL_MONTHS.length + 2; col++) {
+      for (let col = 2; col <= months.length + 2; col++) {
         const cell = row.getCell(col);
         if (typeof cell.value === 'number') {
           cell.numFmt = '#,##0.00';
@@ -119,6 +120,12 @@ export async function generateExcel(farmId, fiscalYear) {
 
 export async function generatePdf(farmId, fiscalYear) {
   const farm = await prisma.farm.findUnique({ where: { id: farmId } });
+
+  const assumption = await prisma.assumption.findUnique({
+    where: { farm_id_fiscal_year: { farm_id: farmId, fiscal_year: fiscalYear } },
+  });
+  const months = generateFiscalMonths(assumption?.start_month || 'Nov');
+
   const accountingData = await prisma.monthlyData.findMany({
     where: { farm_id: farmId, fiscal_year: fiscalYear, type: 'accounting' },
   });
@@ -132,7 +139,7 @@ export async function generatePdf(farmId, fiscalYear) {
   const tableBody = [];
   tableBody.push([
     { text: 'Category', bold: true },
-    ...FISCAL_MONTHS.map(m => ({ text: m, bold: true, alignment: 'right' })),
+    ...months.map(m => ({ text: m, bold: true, alignment: 'right' })),
     { text: 'Total', bold: true, alignment: 'right' },
   ]);
 
@@ -140,7 +147,7 @@ export async function generatePdf(farmId, fiscalYear) {
     const indent = '  '.repeat(cat.level);
     const row = [{ text: `${indent}${cat.display_name}`, bold: cat.level === 0 }];
     let total = 0;
-    for (const month of FISCAL_MONTHS) {
+    for (const month of months) {
       const val = accountingMap[month]?.[cat.code] || 0;
       row.push({ text: formatCurrency(val), alignment: 'right' });
       total += val;
@@ -149,17 +156,20 @@ export async function generatePdf(farmId, fiscalYear) {
     tableBody.push(row);
   }
 
+  const startMonth = assumption?.start_month || 'Nov';
+  const endMonth = assumption?.end_month || 'Oct';
+
   const docDefinition = {
     pageOrientation: 'landscape',
     pageSize: 'LEGAL',
     content: [
       { text: `${farm?.name || 'Farm'} - Operating Statement`, style: 'header' },
-      { text: `Fiscal Year ${fiscalYear} (Nov ${fiscalYear - 1} - Oct ${fiscalYear})`, style: 'subheader' },
+      { text: `Fiscal Year ${fiscalYear} (${startMonth} ${fiscalYear - 1} - ${endMonth} ${fiscalYear})`, style: 'subheader' },
       { text: ' ' },
       {
         table: {
           headerRows: 1,
-          widths: [120, ...FISCAL_MONTHS.map(() => 55), 60],
+          widths: [120, ...months.map(() => 55), 60],
           body: tableBody,
         },
         layout: 'lightHorizontalLines',

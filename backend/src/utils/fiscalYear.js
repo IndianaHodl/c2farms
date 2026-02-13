@@ -1,51 +1,84 @@
-export const FISCAL_MONTHS = ['Nov', 'Dec', 'Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct'];
+export const CALENDAR_MONTHS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
 
-export function fiscalMonthIndex(monthName) {
-  return FISCAL_MONTHS.indexOf(monthName);
+const MONTH_INDEX = {};
+CALENDAR_MONTHS.forEach((m, i) => { MONTH_INDEX[m] = i; });
+
+/**
+ * Generate a 12-month fiscal year array starting from the given month.
+ * E.g. generateFiscalMonths('Nov') => ['Nov','Dec','Jan',...,'Oct']
+ */
+export function generateFiscalMonths(startMonth = 'Nov') {
+  const startIdx = MONTH_INDEX[startMonth] ?? 10; // default Nov
+  const months = [];
+  for (let i = 0; i < 12; i++) {
+    months.push(CALENDAR_MONTHS[(startIdx + i) % 12]);
+  }
+  return months;
 }
 
-export function calendarToFiscal(date) {
+// Default fiscal months (Nov-Oct) for backward compatibility
+export const FISCAL_MONTHS = generateFiscalMonths('Nov');
+
+export function fiscalMonthIndex(monthName, startMonth = 'Nov') {
+  const months = generateFiscalMonths(startMonth);
+  return months.indexOf(monthName);
+}
+
+/**
+ * Convert a calendar date to fiscal year + month name.
+ * startMonth determines when the fiscal year begins.
+ * Months before startMonth belong to the current calendar year's fiscal year.
+ * Months from startMonth onward belong to the NEXT calendar year's fiscal year.
+ */
+export function calendarToFiscal(date, startMonth = 'Nov') {
   const d = new Date(date);
   const calMonth = d.getMonth(); // 0-11
   const calYear = d.getFullYear();
+  const startIdx = MONTH_INDEX[startMonth] ?? 10;
 
-  // Nov (10) and Dec (11) belong to the NEXT fiscal year
-  // Jan (0) through Oct (9) belong to the current fiscal year
-  const fiscalYear = calMonth >= 10 ? calYear + 1 : calYear;
-  const monthNames = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
-  const monthName = monthNames[calMonth];
+  // If calMonth >= startIdx, this month belongs to the NEXT fiscal year
+  const fiscalYear = calMonth >= startIdx ? calYear + 1 : calYear;
+  const monthName = CALENDAR_MONTHS[calMonth];
 
   return { fiscalYear, monthName };
 }
 
-export function fiscalToCalendar(fiscalYear, monthName) {
-  const monthMap = {
-    Nov: { calMonth: 10, calYear: fiscalYear - 1 },
-    Dec: { calMonth: 11, calYear: fiscalYear - 1 },
-    Jan: { calMonth: 0, calYear: fiscalYear },
-    Feb: { calMonth: 1, calYear: fiscalYear },
-    Mar: { calMonth: 2, calYear: fiscalYear },
-    Apr: { calMonth: 3, calYear: fiscalYear },
-    May: { calMonth: 4, calYear: fiscalYear },
-    Jun: { calMonth: 5, calYear: fiscalYear },
-    Jul: { calMonth: 6, calYear: fiscalYear },
-    Aug: { calMonth: 7, calYear: fiscalYear },
-    Sep: { calMonth: 8, calYear: fiscalYear },
-    Oct: { calMonth: 9, calYear: fiscalYear },
-  };
-  const { calMonth, calYear } = monthMap[monthName];
+/**
+ * Convert fiscal year + month name back to a calendar Date (first of that month).
+ */
+export function fiscalToCalendar(fiscalYear, monthName, startMonth = 'Nov') {
+  const calMonth = MONTH_INDEX[monthName]; // 0-11
+  const startIdx = MONTH_INDEX[startMonth] ?? 10;
+
+  // Months from startMonth onward are in the prior calendar year
+  const calYear = calMonth >= startIdx ? fiscalYear - 1 : fiscalYear;
   return new Date(calYear, calMonth, 1);
 }
 
-export function isFutureMonth(fiscalYear, monthName) {
+/**
+ * Returns true if the month's first day is after today (i.e. hasn't started yet).
+ */
+export function isFutureMonth(fiscalYear, monthName, startMonth = 'Nov') {
   const now = new Date();
-  const monthDate = fiscalToCalendar(fiscalYear, monthName);
-  // A month is "future" if its first day is after today
+  const monthDate = fiscalToCalendar(fiscalYear, monthName, startMonth);
   return monthDate > now;
 }
 
-export function getCurrentFiscalMonth() {
-  return calendarToFiscal(new Date());
+/**
+ * Returns true if the month's last calendar day is before today (fully elapsed).
+ */
+export function isPastMonth(fiscalYear, monthName, startMonth = 'Nov') {
+  const now = new Date();
+  const calMonth = MONTH_INDEX[monthName];
+  const startIdx = MONTH_INDEX[startMonth] ?? 10;
+  const calYear = calMonth >= startIdx ? fiscalYear - 1 : fiscalYear;
+  // Last day of the month
+  const lastDay = new Date(calYear, calMonth + 1, 0, 23, 59, 59);
+  return lastDay < now;
+}
+
+export function getCurrentFiscalMonth(startMonth = 'Nov') {
+  return calendarToFiscal(new Date(), startMonth);
 }
 
 // Parse and validate a fiscal year parameter. Returns the integer or null if invalid.
@@ -55,7 +88,7 @@ export function parseYear(yearParam) {
   return y;
 }
 
-// Validate a month string is a valid fiscal month
+// Validate a month string is any valid calendar month
 export function isValidMonth(month) {
-  return FISCAL_MONTHS.includes(month);
+  return CALENDAR_MONTHS.includes(month);
 }

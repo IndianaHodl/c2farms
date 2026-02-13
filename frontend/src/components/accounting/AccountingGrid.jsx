@@ -6,13 +6,15 @@ import 'ag-grid-community/styles/ag-theme-alpine.css';
 import api from '../../services/api';
 import { useThemeMode } from '../../contexts/ThemeContext';
 import { getGridColors } from '../../utils/gridColors';
-import { FISCAL_MONTHS } from '../../utils/fiscalYear';
-import { formatCurrency } from '../../utils/formatting';
+import { FISCAL_MONTHS, isPastMonth } from '../../utils/fiscalYear';
+import { formatCurrency, formatNumber, formatPercent } from '../../utils/formatting';
 
 export default function AccountingGrid({ farmId, fiscalYear, onSummaryLoaded }) {
   const [rowData, setRowData] = useState([]);
   const [summary, setSummary] = useState({});
   const [totalAcres, setTotalAcres] = useState(0);
+  const [months, setMonths] = useState(FISCAL_MONTHS);
+  const [startMonth, setStartMonth] = useState('Nov');
   const [error, setError] = useState('');
   const gridRef = useRef();
   const { mode } = useThemeMode();
@@ -26,7 +28,9 @@ export default function AccountingGrid({ farmId, fiscalYear, onSummaryLoaded }) 
       const newSummary = res.data.summary || {};
       setSummary(newSummary);
       setTotalAcres(res.data.totalAcres || 0);
-      onSummaryLoaded?.(newSummary);
+      if (res.data.months) setMonths(res.data.months);
+      if (res.data.startMonth) setStartMonth(res.data.startMonth);
+      onSummaryLoaded?.(newSummary, res.data.months);
     } catch {
       setError('Failed to load accounting data');
     }
@@ -37,7 +41,7 @@ export default function AccountingGrid({ farmId, fiscalYear, onSummaryLoaded }) 
   const onCellValueChanged = useCallback(async (params) => {
     const { data, colDef } = params;
     const month = colDef.field?.replace('months.', '');
-    if (!month || !FISCAL_MONTHS.includes(month)) return;
+    if (!month || !months.includes(month)) return;
 
     const value = params.newValue;
     try {
@@ -50,7 +54,7 @@ export default function AccountingGrid({ farmId, fiscalYear, onSummaryLoaded }) 
       setError(err.response?.data?.error || 'Failed to update cell');
       fetchData();
     }
-  }, [farmId, fiscalYear, fetchData]);
+  }, [farmId, fiscalYear, fetchData, months]);
 
   const fullRowData = useMemo(() => {
     if (rowData.length === 0) return [];
@@ -64,6 +68,12 @@ export default function AccountingGrid({ farmId, fiscalYear, onSummaryLoaded }) 
         months: {},
         total: 0,
         isComputed: true,
+        priorYear: 0,
+        currentAggregate: 0,
+        forecastTotal: 0,
+        frozenBudgetTotal: 0,
+        variance: 0,
+        pctDiff: 0,
       },
       {
         code: '_operating_income',
@@ -72,15 +82,26 @@ export default function AccountingGrid({ farmId, fiscalYear, onSummaryLoaded }) 
         months: {},
         total: 0,
         isComputed: true,
+        priorYear: 0,
+        currentAggregate: 0,
+        forecastTotal: 0,
+        frozenBudgetTotal: 0,
+        variance: 0,
+        pctDiff: 0,
       },
     ];
 
     const gmRow = computedRows.find(r => r.code === '_gross_margin');
     const oiRow = computedRows.find(r => r.code === '_operating_income');
 
+    const revenueRow = rowData.find(r => r.code === 'sales_revenue');
+    const inputsRow = rowData.find(r => r.code === 'inputs');
+    const varCostsRow = rowData.find(r => r.code === 'variable_costs');
+    const fixedCostsRow = rowData.find(r => r.code === 'fixed_costs');
+
     if (gmRow && oiRow) {
       let gmTotal = 0, oiTotal = 0;
-      for (const month of FISCAL_MONTHS) {
+      for (const month of months) {
         const s = summary[month] || {};
         gmRow.months[month] = s.grossMargin || 0;
         oiRow.months[month] = s.operatingIncome || 0;
@@ -89,12 +110,39 @@ export default function AccountingGrid({ farmId, fiscalYear, onSummaryLoaded }) 
       }
       gmRow.total = gmTotal;
       oiRow.total = oiTotal;
+
+      // Compute aggregate fields for computed rows from parent category rows
+      if (revenueRow && inputsRow && varCostsRow) {
+        gmRow.priorYear = (revenueRow.priorYear || 0) - (inputsRow.priorYear || 0) - (varCostsRow.priorYear || 0);
+        gmRow.currentAggregate = (revenueRow.currentAggregate || 0) - (inputsRow.currentAggregate || 0) - (varCostsRow.currentAggregate || 0);
+        gmRow.forecastTotal = (revenueRow.forecastTotal || 0) - (inputsRow.forecastTotal || 0) - (varCostsRow.forecastTotal || 0);
+        gmRow.frozenBudgetTotal = (revenueRow.frozenBudgetTotal || 0) - (inputsRow.frozenBudgetTotal || 0) - (varCostsRow.frozenBudgetTotal || 0);
+        gmRow.variance = gmRow.forecastTotal - gmRow.frozenBudgetTotal;
+        gmRow.pctDiff = gmRow.frozenBudgetTotal !== 0 ? (gmRow.variance / Math.abs(gmRow.frozenBudgetTotal)) * 100 : 0;
+      }
+
+      if (revenueRow && inputsRow && varCostsRow && fixedCostsRow) {
+        oiRow.priorYear = gmRow.priorYear - (fixedCostsRow.priorYear || 0);
+        oiRow.currentAggregate = gmRow.currentAggregate - (fixedCostsRow.currentAggregate || 0);
+        oiRow.forecastTotal = gmRow.forecastTotal - (fixedCostsRow.forecastTotal || 0);
+        oiRow.frozenBudgetTotal = gmRow.frozenBudgetTotal - (fixedCostsRow.frozenBudgetTotal || 0);
+        oiRow.variance = oiRow.forecastTotal - oiRow.frozenBudgetTotal;
+        oiRow.pctDiff = oiRow.frozenBudgetTotal !== 0 ? (oiRow.variance / Math.abs(oiRow.frozenBudgetTotal)) * 100 : 0;
+      }
     }
 
     return computedRows;
-  }, [rowData, summary]);
+  }, [rowData, summary, months]);
 
   const columnDefs = useMemo(() => {
+    const isLevel0OrComputed = (params) => params.data?.level === 0 || params.data?.isComputed;
+
+    // Formatting helper: level 0 and computed rows get $ sign + bold; others get plain numbers
+    const acctValueFormatter = (params) => {
+      if (isLevel0OrComputed(params)) return formatCurrency(params.value, 0);
+      return formatNumber(params.value, 0);
+    };
+
     const cols = [
       {
         headerName: 'Category',
@@ -107,16 +155,39 @@ export default function AccountingGrid({ farmId, fiscalYear, onSummaryLoaded }) 
           }
           const indent = (params.data?.level || 0) * 20;
           const bold = params.data?.level === 0;
-          return {
+          const style = {
             paddingLeft: `${indent + 8}px`,
             fontWeight: bold ? 'bold' : 'normal',
-            backgroundColor: bold ? colors.parentRow : undefined,
           };
+          if (bold) {
+            style.backgroundColor = colors.parentRow;
+            style.borderTop = `2px solid ${colors.computedBorder}`;
+          }
+          return style;
+        },
+      },
+      {
+        headerName: 'Prior Year',
+        field: 'priorYear',
+        width: 110,
+        type: 'numericColumn',
+        valueFormatter: (params) => {
+          if (isLevel0OrComputed(params)) return formatCurrency(params.value, 0);
+          return formatNumber(params.value, 0);
+        },
+        cellStyle: (params) => {
+          const style = { backgroundColor: colors.priorYearBg, color: colors.priorYearText };
+          if (isLevel0OrComputed(params)) {
+            style.fontWeight = 'bold';
+            style.borderTop = `2px solid ${colors.computedBorder}`;
+          }
+          return style;
         },
       },
     ];
 
-    for (const month of FISCAL_MONTHS) {
+    for (const month of months) {
+      const past = isPastMonth(fiscalYear, month, startMonth);
       cols.push({
         headerName: month,
         field: `months.${month}`,
@@ -135,35 +206,95 @@ export default function AccountingGrid({ farmId, fiscalYear, onSummaryLoaded }) 
           params.data.months[month] = parseFloat(params.newValue) || 0;
           return true;
         },
-        valueFormatter: (p) => formatCurrency(p.value, 0),
+        valueFormatter: acctValueFormatter,
         cellStyle: (params) => {
+          const style = {};
           if (params.data?.isComputed) {
-            return {
-              fontWeight: 'bold',
-              backgroundColor: colors.computedBg,
-              color: (params.value || 0) < 0 ? colors.negativeText : colors.positiveText,
-            };
+            style.fontWeight = 'bold';
+            style.backgroundColor = colors.computedBg;
+            style.color = (params.value || 0) < 0 ? colors.negativeText : colors.positiveText;
+            return style;
           }
-          return {};
+          if (isLevel0OrComputed(params)) {
+            style.fontWeight = 'bold';
+            style.borderTop = `2px solid ${colors.computedBorder}`;
+          }
+          if (past) {
+            style.backgroundColor = colors.actualCell;
+          }
+          return style;
         },
       });
     }
 
-    cols.push({
-      headerName: 'Total',
-      field: 'total',
-      width: 120,
-      type: 'numericColumn',
-      valueFormatter: (p) => formatCurrency(p.value, 0),
-      cellStyle: (params) => ({
-        fontWeight: 'bold',
-        backgroundColor: params.data?.isComputed ? colors.totalComputedBg : colors.totalBg,
-        color: params.data?.isComputed && (params.value || 0) < 0 ? colors.negativeText : undefined,
-      }),
-    });
+    cols.push(
+      {
+        headerName: 'Total',
+        field: 'total',
+        width: 120,
+        type: 'numericColumn',
+        valueFormatter: (params) => {
+          if (isLevel0OrComputed(params)) return formatCurrency(params.value, 0);
+          return formatNumber(params.value, 0);
+        },
+        cellStyle: (params) => ({
+          fontWeight: 'bold',
+          backgroundColor: params.data?.isComputed ? colors.totalComputedBg : colors.totalBg,
+          color: params.data?.isComputed && (params.value || 0) < 0 ? colors.negativeText : undefined,
+          borderTop: isLevel0OrComputed(params) ? `2px solid ${colors.computedBorder}` : undefined,
+        }),
+      },
+      {
+        headerName: 'Cur. Agg',
+        field: 'currentAggregate',
+        width: 110,
+        type: 'numericColumn',
+        valueFormatter: (params) => formatCurrency(params.value, 0),
+        cellStyle: (params) => ({
+          backgroundColor: params.data?.isComputed ? colors.computedBg : colors.aggregateBg,
+          fontWeight: 'bold',
+          borderTop: isLevel0OrComputed(params) ? `2px solid ${colors.computedBorder}` : undefined,
+        }),
+      },
+      {
+        headerName: 'Forecast',
+        field: 'forecastTotal',
+        width: 110,
+        type: 'numericColumn',
+        valueFormatter: (params) => formatCurrency(params.value, 0),
+        cellStyle: (params) => ({
+          backgroundColor: params.data?.isComputed ? colors.computedBg : colors.forecastBg,
+          fontWeight: 'bold',
+          borderTop: isLevel0OrComputed(params) ? `2px solid ${colors.computedBorder}` : undefined,
+        }),
+      },
+      {
+        headerName: 'Variance',
+        field: 'variance',
+        width: 110,
+        type: 'numericColumn',
+        valueFormatter: (params) => formatCurrency(params.value, 0),
+        cellStyle: (params) => ({
+          color: (params.value || 0) < 0 ? colors.negativeText : colors.positiveText,
+          fontWeight: 'bold',
+          borderTop: isLevel0OrComputed(params) ? `2px solid ${colors.computedBorder}` : undefined,
+        }),
+      },
+      {
+        headerName: '% Diff',
+        field: 'pctDiff',
+        width: 80,
+        type: 'numericColumn',
+        valueFormatter: (p) => formatPercent(p.value),
+        cellStyle: (params) => ({
+          color: Math.abs(params.value || 0) > 10 ? colors.negativeText : colors.mutedText,
+          borderTop: isLevel0OrComputed(params) ? `2px solid ${colors.computedBorder}` : undefined,
+        }),
+      },
+    );
 
     return cols;
-  }, [colors]);
+  }, [colors, months, startMonth, fiscalYear, rowData]);
 
   const gridTheme = mode === 'dark' ? 'ag-theme-alpine-dark' : 'ag-theme-alpine';
 

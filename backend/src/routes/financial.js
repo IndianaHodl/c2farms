@@ -4,7 +4,7 @@ import { authenticate } from '../middleware/auth.js';
 import { updatePerUnitCell, updateAccountingCell, recalcParentSums } from '../services/calculationService.js';
 import { calculateForecast } from '../services/forecastService.js';
 import { broadcastCellChange } from '../socket/handler.js';
-import { FISCAL_MONTHS, isFutureMonth, parseYear, isValidMonth } from '../utils/fiscalYear.js';
+import { generateFiscalMonths, isFutureMonth, parseYear, isValidMonth } from '../utils/fiscalYear.js';
 import { CATEGORY_HIERARCHY, LEAF_CATEGORIES } from '../utils/categories.js';
 
 const router = Router();
@@ -20,6 +20,9 @@ router.get('/:farmId/per-unit/:year', authenticate, async (req, res, next) => {
       where: { farm_id_fiscal_year: { farm_id: farmId, fiscal_year: fiscalYear } },
     });
 
+    const startMonth = assumption?.start_month || 'Nov';
+    const months = generateFiscalMonths(startMonth);
+
     const monthlyData = await prisma.monthlyData.findMany({
       where: { farm_id: farmId, fiscal_year: fiscalYear, type: 'per_unit' },
       orderBy: { month: 'asc' },
@@ -30,7 +33,7 @@ router.get('/:farmId/per-unit/:year', authenticate, async (req, res, next) => {
       where: { farm_id: farmId, fiscal_year: fiscalYear, type: 'per_unit' },
     });
 
-    // Get prior year data (mock aggregate)
+    // Get prior year data (aggregate)
     const priorYearData = await prisma.monthlyData.findMany({
       where: { farm_id: farmId, fiscal_year: fiscalYear - 1, type: 'per_unit' },
     });
@@ -57,7 +60,7 @@ router.get('/:farmId/per-unit/:year', authenticate, async (req, res, next) => {
     // Calculate forecast
     let forecast = {};
     try {
-      forecast = await calculateForecast(farmId, fiscalYear);
+      forecast = await calculateForecast(farmId, fiscalYear, startMonth);
     } catch {
       // Forecast may fail if no frozen data
     }
@@ -69,7 +72,7 @@ router.get('/:farmId/per-unit/:year', authenticate, async (req, res, next) => {
       const monthComments = {};
       let currentAgg = 0;
 
-      for (const month of FISCAL_MONTHS) {
+      for (const month of months) {
         const val = monthMap[month]?.data?.[cat.code] || 0;
         monthValues[month] = val;
         monthActuals[month] = monthMap[month]?.isActual || false;
@@ -106,7 +109,7 @@ router.get('/:farmId/per-unit/:year', authenticate, async (req, res, next) => {
     if (revenueRow && inputsRow && varCostsRow) {
       const netbackMonths = {};
       let netbackAgg = 0;
-      for (const month of FISCAL_MONTHS) {
+      for (const month of months) {
         const val = (revenueRow.months[month] || 0) - (inputsRow.months[month] || 0) - (varCostsRow.months[month] || 0);
         netbackMonths[month] = val;
         netbackAgg += val;
@@ -135,7 +138,7 @@ router.get('/:farmId/per-unit/:year', authenticate, async (req, res, next) => {
       });
     }
 
-    res.json({ fiscalYear, months: FISCAL_MONTHS, rows, isFrozen: assumption?.is_frozen || false });
+    res.json({ fiscalYear, startMonth, months, rows, isFrozen: assumption?.is_frozen || false });
   } catch (err) {
     next(err);
   }
@@ -211,27 +214,57 @@ router.get('/:farmId/accounting/:year', authenticate, async (req, res, next) => 
     const fiscalYear = parseYear(year);
     if (!fiscalYear) return res.status(400).json({ error: 'Invalid fiscal year' });
 
-    const monthlyData = await prisma.monthlyData.findMany({
-      where: { farm_id: farmId, fiscal_year: fiscalYear, type: 'accounting' },
-    });
-
     const assumption = await prisma.assumption.findUnique({
       where: { farm_id_fiscal_year: { farm_id: farmId, fiscal_year: fiscalYear } },
     });
 
+    const startMonth = assumption?.start_month || 'Nov';
+    const months = generateFiscalMonths(startMonth);
+    const totalAcres = assumption?.total_acres || 0;
+
+    const monthlyData = await prisma.monthlyData.findMany({
+      where: { farm_id: farmId, fiscal_year: fiscalYear, type: 'accounting' },
+    });
+
+    // Get prior year accounting data
+    const priorYearData = await prisma.monthlyData.findMany({
+      where: { farm_id: farmId, fiscal_year: fiscalYear - 1, type: 'accounting' },
+    });
+
+    const priorYearAgg = {};
+    for (const row of priorYearData) {
+      for (const [key, val] of Object.entries(row.data_json || {})) {
+        priorYearAgg[key] = (priorYearAgg[key] || 0) + val;
+      }
+    }
+
+    // Calculate forecast (per-unit based)
+    let forecast = {};
+    try {
+      forecast = await calculateForecast(farmId, fiscalYear, startMonth);
+    } catch {
+      // Forecast may not be available
+    }
+
     const monthMap = {};
+    const monthActualMap = {};
     for (const row of monthlyData) {
-      monthMap[row.month] = { data: row.data_json || {}, isActual: row.is_actual };
+      monthMap[row.month] = row.data_json || {};
+      monthActualMap[row.month] = row.is_actual || false;
     }
 
     const rows = CATEGORY_HIERARCHY.map(cat => {
       const monthValues = {};
+      const actuals = {};
       let total = 0;
-      for (const month of FISCAL_MONTHS) {
-        const val = monthMap[month]?.data?.[cat.code] || 0;
+      for (const month of months) {
+        const val = monthMap[month]?.[cat.code] || 0;
         monthValues[month] = val;
+        actuals[month] = monthActualMap[month] || false;
         total += val;
       }
+
+      const fc = forecast[cat.code] || {};
 
       return {
         code: cat.code,
@@ -241,17 +274,24 @@ router.get('/:farmId/accounting/:year', authenticate, async (req, res, next) => 
         category_type: cat.category_type,
         sort_order: cat.sort_order,
         months: monthValues,
+        actuals,
         total,
+        priorYear: priorYearAgg[cat.code] || 0,
+        currentAggregate: fc.currentAggregate ? fc.currentAggregate * totalAcres : 0,
+        forecastTotal: fc.forecastTotal ? fc.forecastTotal * totalAcres : total,
+        frozenBudgetTotal: fc.frozenBudgetTotal ? fc.frozenBudgetTotal * totalAcres : 0,
+        variance: fc.variance ? fc.variance * totalAcres : 0,
+        pctDiff: fc.pctDiff ?? 0,
       };
     });
 
     // Compute summary rows
     const summaryByMonth = {};
-    for (const month of FISCAL_MONTHS) {
-      const revenue = monthMap[month]?.data?.['sales_revenue'] || 0;
-      const inputs = monthMap[month]?.data?.['inputs'] || 0;
-      const variableCosts = monthMap[month]?.data?.['variable_costs'] || 0;
-      const fixedCosts = monthMap[month]?.data?.['fixed_costs'] || 0;
+    for (const month of months) {
+      const revenue = monthMap[month]?.['sales_revenue'] || 0;
+      const inputs = monthMap[month]?.['inputs'] || 0;
+      const variableCosts = monthMap[month]?.['variable_costs'] || 0;
+      const fixedCosts = monthMap[month]?.['fixed_costs'] || 0;
       const grossMargin = revenue - inputs - variableCosts;
       const operatingIncome = grossMargin - fixedCosts;
 
@@ -260,10 +300,12 @@ router.get('/:farmId/accounting/:year', authenticate, async (req, res, next) => 
 
     res.json({
       fiscalYear,
-      totalAcres: assumption?.total_acres || 0,
-      months: FISCAL_MONTHS,
+      startMonth,
+      totalAcres,
+      months,
       rows,
       summary: summaryByMonth,
+      isFrozen: assumption?.is_frozen || false,
     });
   } catch (err) {
     next(err);
