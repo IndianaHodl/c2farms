@@ -1,0 +1,129 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model User {
+  id            String         @id @default(uuid())
+  email         String         @unique
+  password_hash String
+  name          String
+  role          String         @default("farm_manager")
+  created_at    DateTime       @default(now())
+  updated_at    DateTime       @updatedAt
+  farm_roles    UserFarmRole[]
+
+  @@map("users")
+}
+
+model Farm {
+  id         String         @id @default(uuid())
+  name       String
+  created_at DateTime       @default(now())
+  updated_at DateTime       @updatedAt
+  user_roles UserFarmRole[]
+
+  @@map("farms")
+}
+
+model UserFarmRole {
+  id      String @id @default(uuid())
+  user_id String
+  farm_id String
+  role    String @default("admin")
+  user    User   @relation(fields: [user_id], references: [id], onDelete: Cascade)
+  farm    Farm   @relation(fields: [farm_id], references: [id], onDelete: Cascade)
+
+  @@unique([user_id, farm_id])
+  @@map("user_farm_roles")
+}
+
+model Assumption {
+  id           String    @id @default(uuid())
+  farm_id      String
+  fiscal_year  Int
+  start_month  String    @default("Nov")
+  end_month    String    @default("Oct")
+  total_acres  Float
+  crops_json   Json      @default("[]")
+  bins_json    Json      @default("[]")
+  is_frozen    Boolean   @default(false)
+  frozen_at    DateTime?
+  created_at   DateTime  @default(now())
+  updated_at   DateTime  @updatedAt
+
+  @@unique([farm_id, fiscal_year])
+  @@map("assumptions")
+}
+
+model MonthlyData {
+  id            String   @id @default(uuid())
+  farm_id       String
+  fiscal_year   Int
+  month         String
+  type          String   // 'per_unit' or 'accounting'
+  data_json     Json     @default("{}")
+  is_actual     Boolean  @default(false)
+  comments_json Json     @default("{}")
+  created_at    DateTime @default(now())
+  updated_at    DateTime @updatedAt
+
+  @@unique([farm_id, fiscal_year, month, type])
+  @@map("monthly_data")
+}
+
+model MonthlyDataFrozen {
+  id            String   @id @default(uuid())
+  farm_id       String
+  fiscal_year   Int
+  month         String
+  type          String
+  data_json     Json     @default("{}")
+  is_actual     Boolean  @default(false)
+  comments_json Json     @default("{}")
+  created_at    DateTime @default(now())
+
+  @@unique([farm_id, fiscal_year, month, type])
+  @@map("monthly_data_frozen")
+}
+
+model FinancialCategory {
+  id            Int     @id
+  code          String  @unique
+  display_name  String
+  parent_id     Int?
+  path          String
+  level         Int
+  sort_order    Int
+  category_type String
+  parent        FinancialCategory?  @relation("CategoryParent", fields: [parent_id], references: [id])
+  children      FinancialCategory[] @relation("CategoryParent")
+
+  @@map("financial_categories")
+}
+
+model QbCategoryMapping {
+  id              String @id @default(uuid())
+  farm_id         String
+  qb_account_name String
+  category_code   String
+  weight          Float  @default(1.0)
+
+  @@unique([farm_id, qb_account_name])
+  @@map("qb_category_mappings")
+}
+
+model QbToken {
+  id            String   @id @default(uuid())
+  farm_id       String   @unique
+  access_token  String
+  refresh_token String
+  realm_id      String
+  expires_at    DateTime
+
+  @@map("qb_tokens")
+}
