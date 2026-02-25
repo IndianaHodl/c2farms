@@ -78,7 +78,7 @@ export default function AccountingGrid({ farmId, fiscalYear, onSummaryLoaded }) 
         width: 260,
         cellStyle: (params) => {
           if (params.data?.isComputed) {
-            return { fontWeight: 'bold', backgroundColor: colors.computedBg, borderTop: `2px solid ${colors.computedBorder}` };
+            return { fontWeight: 'bold', borderTop: `2px solid ${colors.computedBorder}` };
           }
           const indent = (params.data?.level || 0) * 20;
           const bold = params.data?.level === 0;
@@ -138,7 +138,6 @@ export default function AccountingGrid({ farmId, fiscalYear, onSummaryLoaded }) 
           const style = {};
           if (params.data?.isComputed) {
             style.fontWeight = 'bold';
-            style.backgroundColor = colors.computedBg;
             style.color = (params.value || 0) < 0 ? colors.negativeText : colors.positiveText;
             return style;
           }
@@ -162,7 +161,7 @@ export default function AccountingGrid({ farmId, fiscalYear, onSummaryLoaded }) 
         type: 'numericColumn',
         valueFormatter: (params) => formatCurrency(params.value, 0),
         cellStyle: (params) => ({
-          backgroundColor: params.data?.isComputed ? colors.computedBg : colors.aggregateBg,
+          backgroundColor: colors.aggregateBg,
           fontWeight: 'bold',
           borderTop: isLevel0OrComputed(params) ? `2px solid ${colors.computedBorder}` : undefined,
         }),
@@ -174,7 +173,7 @@ export default function AccountingGrid({ farmId, fiscalYear, onSummaryLoaded }) 
         type: 'numericColumn',
         valueFormatter: (params) => formatCurrency(params.value, 0),
         cellStyle: (params) => ({
-          backgroundColor: params.data?.isComputed ? colors.computedBg : colors.forecastBg,
+          backgroundColor: colors.forecastBg,
           fontWeight: 'bold',
           borderTop: isLevel0OrComputed(params) ? `2px solid ${colors.computedBorder}` : undefined,
         }),

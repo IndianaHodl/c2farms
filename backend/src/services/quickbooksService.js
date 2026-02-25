@@ -1,8 +1,9 @@
+import jwt from 'jsonwebtoken';
 import prisma from '../config/database.js';
 import { updateAccountingCell } from './calculationService.js';
 
 // QuickBooks OAuth2 placeholder
-export function getAuthUrl(farmId) {
+export function getAuthUrl(farmId, userId) {
   const clientId = process.env.QB_CLIENT_ID;
   const redirectUri = process.env.QB_REDIRECT_URI;
 
@@ -10,15 +11,27 @@ export function getAuthUrl(farmId) {
     return { fallback: true, message: 'QuickBooks not configured. Please enter actuals manually.' };
   }
 
-  const url = `https://appcenter.intuit.com/connect/oauth2?client_id=${clientId}&response_type=code&scope=com.intuit.quickbooks.accounting&redirect_uri=${encodeURIComponent(redirectUri)}&state=${farmId}`;
+  // Sign the state param so the callback can verify farmId + userId
+  const state = jwt.sign({ farmId, userId }, process.env.JWT_SECRET, { expiresIn: '30m' });
+  const url = `https://appcenter.intuit.com/connect/oauth2?client_id=${clientId}&response_type=code&scope=com.intuit.quickbooks.accounting&redirect_uri=${encodeURIComponent(redirectUri)}&state=${encodeURIComponent(state)}`;
   return { url };
 }
 
 export async function handleCallback(code, realmId, state) {
-  // Placeholder: In production, exchange code for tokens
-  // For now, store dummy tokens
-  const farmId = state;
+  // Verify and decode the signed state parameter
+  let farmId;
+  try {
+    const decoded = jwt.verify(state, process.env.JWT_SECRET);
+    farmId = decoded.farmId;
+  } catch {
+    throw new Error('Invalid or expired OAuth state parameter');
+  }
 
+  if (!farmId) {
+    throw new Error('Missing farmId in OAuth state');
+  }
+
+  // Placeholder: In production, exchange code for tokens
   await prisma.qbToken.upsert({
     where: { farm_id: farmId },
     update: {

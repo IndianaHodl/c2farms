@@ -96,10 +96,14 @@ router.get('/:farmId/per-unit/:year', authenticate, async (req, res, next) => {
       }
 
       const fc = forecast[cat.code] || {};
-      const forecastVal = fc.forecastTotal ?? currentAgg;
-      const budgetVal = isFrozenPU
-        ? (fc.frozenBudgetTotal ?? 0)
-        : forecastVal;
+      let forecastVal, budgetVal;
+      if (isFrozenPU) {
+        forecastVal = fc.forecastTotal ?? currentAgg;
+        budgetVal = fc.frozenBudgetTotal ?? 0;
+      } else {
+        forecastVal = currentAgg;
+        budgetVal = currentAgg;
+      }
       const varianceVal = forecastVal - budgetVal;
       const pctDiffVal = budgetVal !== 0 ? (varianceVal / Math.abs(budgetVal)) * 100 : 0;
 
@@ -116,7 +120,7 @@ router.get('/:farmId/per-unit/:year', authenticate, async (req, res, next) => {
         months: monthValues,
         actuals: monthActuals,
         comments: monthComments,
-        currentAggregate: fc.currentAggregate ?? currentAgg,
+        currentAggregate: isFrozenPU ? (fc.currentAggregate ?? currentAgg) : currentAgg,
         forecastTotal: forecastVal,
         frozenBudgetTotal: budgetVal,
         variance: varianceVal,
@@ -329,10 +333,14 @@ router.get('/:farmId/accounting/:year', authenticate, async (req, res, next) => 
       }
 
       const fc = forecast[cat.code] || {};
-      const forecastVal = fc.forecastTotal != null ? fc.forecastTotal * totalAcres : total;
-      const budgetVal = isFrozen
-        ? (fc.frozenBudgetTotal != null ? fc.frozenBudgetTotal * totalAcres : 0)
-        : forecastVal;
+      let forecastVal, budgetVal;
+      if (isFrozen) {
+        forecastVal = fc.forecastTotal != null ? fc.forecastTotal * totalAcres : total;
+        budgetVal = fc.frozenBudgetTotal != null ? fc.frozenBudgetTotal * totalAcres : 0;
+      } else {
+        forecastVal = total;
+        budgetVal = total;
+      }
       const varianceVal = forecastVal - budgetVal;
       const pctDiffVal = budgetVal !== 0 ? (varianceVal / Math.abs(budgetVal)) * 100 : 0;
 

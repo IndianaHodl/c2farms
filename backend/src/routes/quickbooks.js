@@ -1,15 +1,29 @@
 import { Router } from 'express';
+import prisma from '../config/database.js';
 import { authenticate } from '../middleware/auth.js';
 import * as qbService from '../services/quickbooksService.js';
 
 // General QB routes (mounted at /api/quickbooks)
 export const qbGeneralRouter = Router();
 
-qbGeneralRouter.get('/auth-url', authenticate, async (req, res) => {
-  const farmId = req.query.farmId;
-  if (!farmId) return res.status(400).json({ error: 'farmId query param required' });
-  const result = qbService.getAuthUrl(farmId);
-  res.json(result);
+qbGeneralRouter.get('/auth-url', authenticate, async (req, res, next) => {
+  try {
+    const farmId = req.query.farmId;
+    if (!farmId) return res.status(400).json({ error: 'farmId query param required' });
+
+    // Verify user has access to the requested farm
+    const role = await prisma.userFarmRole.findUnique({
+      where: { user_id_farm_id: { user_id: req.userId, farm_id: farmId } },
+    });
+    if (!role) {
+      return res.status(403).json({ error: 'Access denied: no access to this farm' });
+    }
+
+    const result = qbService.getAuthUrl(farmId, req.userId);
+    res.json(result);
+  } catch (err) {
+    next(err);
+  }
 });
 
 qbGeneralRouter.get('/callback', async (req, res, next) => {
