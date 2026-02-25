@@ -156,7 +156,7 @@ export default function PerUnitGrid({ farmId, fiscalYear }) {
 
     cols.push(
       {
-        headerName: 'Cur. Agg',
+        headerName: 'Forecast',
         field: 'currentAggregate',
         width: 100,
         type: 'numericColumn',
@@ -168,7 +168,7 @@ export default function PerUnitGrid({ farmId, fiscalYear }) {
         }),
       },
       {
-        headerName: 'Forecast',
+        headerName: 'Budget',
         field: 'forecastTotal',
         width: 100,
         type: 'numericColumn',
