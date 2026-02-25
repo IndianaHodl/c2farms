@@ -7,6 +7,7 @@ import Assumptions from './pages/Assumptions';
 import PerUnit from './pages/PerUnit';
 import Accounting from './pages/Accounting';
 import Dashboard from './pages/Dashboard';
+import ChartOfAccounts from './pages/ChartOfAccounts';
 import ErrorBoundary from './components/shared/ErrorBoundary';
 import { Typography, Box } from '@mui/material';
 
@@ -51,6 +52,7 @@ export default function App() {
                       <Route path="/per-unit" element={<PerUnit />} />
                       <Route path="/accounting" element={<Accounting />} />
                       <Route path="/dashboard" element={<Dashboard />} />
+                      <Route path="/chart-of-accounts" element={<ChartOfAccounts />} />
                       <Route path="*" element={<NotFound />} />
                     </Routes>
                   </AppLayout>

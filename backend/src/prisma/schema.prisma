@@ -127,3 +127,59 @@ model QbToken {
 
   @@map("qb_tokens")
 }
+
+model FarmCategory {
+  id            String         @id @default(uuid())
+  farm_id       String
+  code          String
+  display_name  String
+  parent_id     String?
+  path          String
+  level         Int
+  sort_order    Int
+  category_type String         // REVENUE, INPUT, LPM, LBF, INSURANCE
+  is_active     Boolean        @default(true)
+  created_at    DateTime       @default(now())
+  updated_at    DateTime       @updatedAt
+
+  parent        FarmCategory?  @relation("FarmCategoryParent", fields: [parent_id], references: [id])
+  children      FarmCategory[] @relation("FarmCategoryParent")
+  gl_accounts   GlAccount[]
+
+  @@unique([farm_id, code])
+  @@map("farm_categories")
+}
+
+model GlAccount {
+  id             String          @id @default(uuid())
+  farm_id        String
+  account_number String
+  account_name   String
+  category_id    String?
+  qb_account_id  String?
+  is_active      Boolean         @default(true)
+  created_at     DateTime        @default(now())
+  updated_at     DateTime        @updatedAt
+
+  category       FarmCategory?   @relation(fields: [category_id], references: [id])
+  actuals        GlActualDetail[]
+
+  @@unique([farm_id, account_number])
+  @@map("gl_accounts")
+}
+
+model GlActualDetail {
+  id            String    @id @default(uuid())
+  farm_id       String
+  fiscal_year   Int
+  month         String
+  gl_account_id String
+  amount        Float
+  created_at    DateTime  @default(now())
+  updated_at    DateTime  @updatedAt
+
+  gl_account    GlAccount @relation(fields: [gl_account_id], references: [id])
+
+  @@unique([farm_id, fiscal_year, month, gl_account_id])
+  @@map("gl_actual_details")
+}

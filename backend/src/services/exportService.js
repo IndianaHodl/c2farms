@@ -1,7 +1,7 @@
 import ExcelJS from 'exceljs';
 import prisma from '../config/database.js';
 import { generateFiscalMonths } from '../utils/fiscalYear.js';
-import { CATEGORY_HIERARCHY } from '../utils/categories.js';
+import { getFarmCategories } from './categoryService.js';
 
 export async function generateExcel(farmId, fiscalYear) {
   const workbook = new ExcelJS.Workbook();
@@ -13,6 +13,7 @@ export async function generateExcel(farmId, fiscalYear) {
 
   const farm = await prisma.farm.findUnique({ where: { id: farmId } });
   const months = generateFiscalMonths(assumption?.start_month || 'Nov');
+  const farmCategories = await getFarmCategories(farmId);
 
   // Sheet 1: Per-Unit
   const perUnitSheet = workbook.addWorksheet('Per-Unit Analysis');
@@ -30,7 +31,7 @@ export async function generateExcel(farmId, fiscalYear) {
   perUnitSheet.addRow(headerRow);
   perUnitSheet.getRow(1).font = { bold: true };
 
-  for (const cat of CATEGORY_HIERARCHY) {
+  for (const cat of farmCategories) {
     const indent = '  '.repeat(cat.level);
     const row = [`${indent}${cat.display_name}`];
     let total = 0;
@@ -62,7 +63,7 @@ export async function generateExcel(farmId, fiscalYear) {
   accountingSheet.addRow(headerRow);
   accountingSheet.getRow(1).font = { bold: true };
 
-  for (const cat of CATEGORY_HIERARCHY) {
+  for (const cat of farmCategories) {
     const indent = '  '.repeat(cat.level);
     const row = [`${indent}${cat.display_name}`];
     let total = 0;
@@ -79,7 +80,44 @@ export async function generateExcel(farmId, fiscalYear) {
   accountingSheet.columns.forEach(col => { col.width = 16; });
   accountingSheet.getColumn(1).width = 35;
 
-  // Sheet 3: Assumptions
+  // Sheet 3: GL Detail (if GL accounts exist)
+  const glAccounts = await prisma.glAccount.findMany({
+    where: { farm_id: farmId, is_active: true },
+    include: { category: true },
+    orderBy: { account_number: 'asc' },
+  });
+
+  if (glAccounts.length > 0) {
+    const glSheet = workbook.addWorksheet('GL Detail');
+    const glActuals = await prisma.glActualDetail.findMany({
+      where: { farm_id: farmId, fiscal_year: fiscalYear },
+      include: { gl_account: true },
+    });
+
+    const glHeader = ['Account #', 'Account Name', 'Category', ...months, 'Total'];
+    glSheet.addRow(glHeader);
+    glSheet.getRow(1).font = { bold: true };
+
+    for (const gl of glAccounts) {
+      const row = [gl.account_number, gl.account_name, gl.category?.display_name || 'Unmapped'];
+      let total = 0;
+      for (const month of months) {
+        const actual = glActuals.find(a => a.gl_account_id === gl.id && a.month === month);
+        const val = actual?.amount || 0;
+        row.push(val);
+        total += val;
+      }
+      row.push(total);
+      glSheet.addRow(row);
+    }
+
+    glSheet.columns.forEach(col => { col.width = 16; });
+    glSheet.getColumn(1).width = 14;
+    glSheet.getColumn(2).width = 30;
+    glSheet.getColumn(3).width = 22;
+  }
+
+  // Sheet: Assumptions
   if (assumption) {
     const assSheet = workbook.addWorksheet('Assumptions');
     assSheet.addRow(['Farm', farm?.name || '']);
@@ -125,6 +163,7 @@ export async function generatePdf(farmId, fiscalYear) {
     where: { farm_id_fiscal_year: { farm_id: farmId, fiscal_year: fiscalYear } },
   });
   const months = generateFiscalMonths(assumption?.start_month || 'Nov');
+  const farmCategories = await getFarmCategories(farmId);
 
   const accountingData = await prisma.monthlyData.findMany({
     where: { farm_id: farmId, fiscal_year: fiscalYear, type: 'accounting' },
@@ -143,7 +182,7 @@ export async function generatePdf(farmId, fiscalYear) {
     { text: 'Total', bold: true, alignment: 'right' },
   ]);
 
-  for (const cat of CATEGORY_HIERARCHY) {
+  for (const cat of farmCategories) {
     const indent = '  '.repeat(cat.level);
     const row = [{ text: `${indent}${cat.display_name}`, bold: cat.level === 0 }];
     let total = 0;

@@ -1,27 +1,10 @@
 import { Router } from 'express';
 import prisma from '../config/database.js';
 import { authenticate } from '../middleware/auth.js';
-import { LEAF_CATEGORIES, CATEGORY_HIERARCHY, getChildrenCodes } from '../utils/categories.js';
+import { getFarmLeafCategories, getFarmCategories, recalcParentSums } from '../services/categoryService.js';
 import { isValidMonth } from '../utils/fiscalYear.js';
 
 const router = Router();
-
-const leafCodes = new Set(LEAF_CATEGORIES.map(c => c.code));
-
-// Recalculate parent sums from leaf values
-function recalcParents(data) {
-  const result = { ...data };
-  // Process parents bottom-up by level
-  const parents = CATEGORY_HIERARCHY
-    .filter(c => CATEGORY_HIERARCHY.some(o => o.parent_id === c.id))
-    .sort((a, b) => b.level - a.level);
-
-  for (const parent of parents) {
-    const childCodes = getChildrenCodes(parent.code);
-    result[parent.code] = childCodes.reduce((sum, code) => sum + (result[code] || 0), 0);
-  }
-  return result;
-}
 
 // POST /:farmId/accounting/import-csv
 router.post('/:farmId/accounting/import-csv', authenticate, async (req, res, next) => {
@@ -32,6 +15,11 @@ router.post('/:farmId/accounting/import-csv', authenticate, async (req, res, nex
     if (!rows || !Array.isArray(rows) || rows.length === 0) {
       return res.status(400).json({ error: 'rows array is required' });
     }
+
+    // Get farm's leaf categories for validation
+    const leafCategories = await getFarmLeafCategories(farmId);
+    const leafCodes = new Set(leafCategories.map(c => c.code));
+    const farmCategories = await getFarmCategories(farmId);
 
     // Cache assumptions by fiscal year for per-unit conversion
     const assumptionCache = {};
@@ -75,7 +63,7 @@ router.post('/:farmId/accounting/import-csv', authenticate, async (req, res, nex
 
       const currentData = existing?.data_json || {};
       const merged = { ...currentData, ...validData };
-      const withParents = recalcParents(merged);
+      const withParents = recalcParentSums(merged, farmCategories);
 
       // Upsert accounting data
       await prisma.monthlyData.upsert({

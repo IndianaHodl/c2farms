@@ -19,7 +19,7 @@ export default function CashFlowSummary({ summary, months }) {
       <Grid container spacing={1}>
         {displayMonths.map(month => {
           const s = summary[month] || {};
-          const isPositive = (s.operatingIncome || 0) >= 0;
+          const isPositive = (s.profit ?? s.operatingIncome ?? 0) >= 0;
           return (
             <Grid item xs={6} sm={3} md={2} lg={1} key={month}>
               <Card
@@ -31,7 +31,7 @@ export default function CashFlowSummary({ summary, months }) {
                 <CardContent sx={{ p: 1, '&:last-child': { pb: 1 } }}>
                   <Typography variant="caption" color="text.secondary">{month}</Typography>
                   <Typography variant="body2" fontWeight="bold" color={isPositive ? 'success.main' : 'error.main'}>
-                    {formatCurrency(s.operatingIncome || 0, 0)}
+                    {formatCurrency(s.profit ?? s.operatingIncome ?? 0, 0)}
                   </Typography>
                 </CardContent>
               </Card>

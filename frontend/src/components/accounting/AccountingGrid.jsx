@@ -56,88 +56,15 @@ export default function AccountingGrid({ farmId, fiscalYear, onSummaryLoaded }) 
     }
   }, [farmId, fiscalYear, fetchData, months]);
 
+  // Rows come from the API already including computed rows (_total_expense, _profit)
   const fullRowData = useMemo(() => {
     if (rowData.length === 0) return [];
-
-    const computedRows = [
-      ...rowData,
-      {
-        code: '_gross_margin',
-        display_name: 'Gross Margin',
-        level: -1,
-        months: {},
-        total: 0,
-        isComputed: true,
-        priorYear: 0,
-        currentAggregate: 0,
-        forecastTotal: 0,
-        frozenBudgetTotal: 0,
-        variance: 0,
-        pctDiff: 0,
-      },
-      {
-        code: '_operating_income',
-        display_name: 'Operating Income / Cash Flow',
-        level: -1,
-        months: {},
-        total: 0,
-        isComputed: true,
-        priorYear: 0,
-        currentAggregate: 0,
-        forecastTotal: 0,
-        frozenBudgetTotal: 0,
-        variance: 0,
-        pctDiff: 0,
-      },
-    ];
-
-    const gmRow = computedRows.find(r => r.code === '_gross_margin');
-    const oiRow = computedRows.find(r => r.code === '_operating_income');
-
-    const revenueRow = rowData.find(r => r.code === 'sales_revenue');
-    const inputsRow = rowData.find(r => r.code === 'inputs');
-    const varCostsRow = rowData.find(r => r.code === 'variable_costs');
-    const fixedCostsRow = rowData.find(r => r.code === 'fixed_costs');
-
-    if (gmRow && oiRow) {
-      let gmTotal = 0, oiTotal = 0;
-      for (const month of months) {
-        const s = summary[month] || {};
-        gmRow.months[month] = s.grossMargin || 0;
-        oiRow.months[month] = s.operatingIncome || 0;
-        gmTotal += s.grossMargin || 0;
-        oiTotal += s.operatingIncome || 0;
-      }
-      gmRow.total = gmTotal;
-      oiRow.total = oiTotal;
-
-      // Compute aggregate fields for computed rows from parent category rows
-      if (revenueRow && inputsRow && varCostsRow) {
-        gmRow.priorYear = (revenueRow.priorYear || 0) - (inputsRow.priorYear || 0) - (varCostsRow.priorYear || 0);
-        gmRow.currentAggregate = (revenueRow.currentAggregate || 0) - (inputsRow.currentAggregate || 0) - (varCostsRow.currentAggregate || 0);
-        gmRow.forecastTotal = (revenueRow.forecastTotal || 0) - (inputsRow.forecastTotal || 0) - (varCostsRow.forecastTotal || 0);
-        gmRow.frozenBudgetTotal = (revenueRow.frozenBudgetTotal || 0) - (inputsRow.frozenBudgetTotal || 0) - (varCostsRow.frozenBudgetTotal || 0);
-        gmRow.variance = gmRow.forecastTotal - gmRow.frozenBudgetTotal;
-        gmRow.pctDiff = gmRow.frozenBudgetTotal !== 0 ? (gmRow.variance / Math.abs(gmRow.frozenBudgetTotal)) * 100 : 0;
-      }
-
-      if (revenueRow && inputsRow && varCostsRow && fixedCostsRow) {
-        oiRow.priorYear = gmRow.priorYear - (fixedCostsRow.priorYear || 0);
-        oiRow.currentAggregate = gmRow.currentAggregate - (fixedCostsRow.currentAggregate || 0);
-        oiRow.forecastTotal = gmRow.forecastTotal - (fixedCostsRow.forecastTotal || 0);
-        oiRow.frozenBudgetTotal = gmRow.frozenBudgetTotal - (fixedCostsRow.frozenBudgetTotal || 0);
-        oiRow.variance = oiRow.forecastTotal - oiRow.frozenBudgetTotal;
-        oiRow.pctDiff = oiRow.frozenBudgetTotal !== 0 ? (oiRow.variance / Math.abs(oiRow.frozenBudgetTotal)) * 100 : 0;
-      }
-    }
-
-    return computedRows;
-  }, [rowData, summary, months]);
+    return rowData;
+  }, [rowData]);
 
   const columnDefs = useMemo(() => {
     const isLevel0OrComputed = (params) => params.data?.level === 0 || params.data?.isComputed;
 
-    // Formatting helper: level 0 and computed rows get $ sign + bold; others get plain numbers
     const acctValueFormatter = (params) => {
       if (isLevel0OrComputed(params)) return formatCurrency(params.value, 0);
       return formatNumber(params.value, 0);
@@ -148,7 +75,7 @@ export default function AccountingGrid({ farmId, fiscalYear, onSummaryLoaded }) 
         headerName: 'Category',
         field: 'display_name',
         pinned: 'left',
-        width: 220,
+        width: 260,
         cellStyle: (params) => {
           if (params.data?.isComputed) {
             return { fontWeight: 'bold', backgroundColor: colors.computedBg, borderTop: `2px solid ${colors.computedBorder}` };
@@ -195,7 +122,7 @@ export default function AccountingGrid({ farmId, fiscalYear, onSummaryLoaded }) 
         type: 'numericColumn',
         editable: (params) => {
           if (params.data?.isComputed) return false;
-          // Only leaf categories are editable (those with no children in the hierarchy)
+          // Only leaf categories (no children) are editable
           const hasChildren = rowData.some(r => r.parent_code === params.data?.code);
           if (hasChildren) return false;
           return true;

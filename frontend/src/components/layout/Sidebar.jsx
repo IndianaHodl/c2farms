@@ -6,12 +6,14 @@ import SettingsIcon from '@mui/icons-material/Settings';
 import TableChartIcon from '@mui/icons-material/TableChart';
 import AccountBalanceIcon from '@mui/icons-material/AccountBalance';
 import DashboardIcon from '@mui/icons-material/Dashboard';
+import ListAltIcon from '@mui/icons-material/ListAlt';
 
 const NAV_ITEMS = [
   { label: '1. Assumptions', path: '/assumptions', icon: <SettingsIcon /> },
   { label: '2. Per-Unit', path: '/per-unit', icon: <TableChartIcon /> },
   { label: '3. Accounting', path: '/accounting', icon: <AccountBalanceIcon /> },
   { label: '4. Dashboard', path: '/dashboard', icon: <DashboardIcon /> },
+  { label: 'Chart of Accounts', path: '/chart-of-accounts', icon: <ListAltIcon /> },
 ];
 
 export default function Sidebar({ width }) {

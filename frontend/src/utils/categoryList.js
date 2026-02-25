@@ -1,35 +1,34 @@
-// Leaf categories available for CSV mapping
-// Mirrors the backend LEAF_CATEGORIES from backend/src/utils/categories.js
+// This file is maintained for backward compatibility with CsvImportDialog.
+// The canonical source of categories is now the backend API: GET /api/farms/:farmId/categories
+
+import api from '../services/api';
+
+// Fetch leaf categories from the API for a specific farm
+export async function fetchFarmCategories(farmId) {
+  const res = await api.get(`/api/farms/${farmId}/categories`);
+  const categories = res.data.categories || [];
+  // Determine which are leaf (no children)
+  const parentIds = new Set(categories.filter(c => c.parent_id).map(c => c.parent_id));
+  return categories.filter(c => !parentIds.has(c.id));
+}
+
+// Fetch full category hierarchy from the API
+export async function fetchFullCategories(farmId) {
+  const res = await api.get(`/api/farms/${farmId}/categories`);
+  return res.data.categories || [];
+}
+
+// Static fallback for backward compatibility
 export const LEAF_CATEGORIES = [
-  { code: 'sales_revenue', display_name: 'Sales Revenue' },
   { code: 'input_seed', display_name: 'Seed' },
-  { code: 'input_fert_n', display_name: 'Nitrogen (N)' },
-  { code: 'input_fert_p', display_name: 'Phosphorus (P)' },
-  { code: 'input_fert_k', display_name: 'Potassium (K)' },
-  { code: 'input_fert_s', display_name: 'Sulfur (S)' },
+  { code: 'input_fert', display_name: 'Fertilizer' },
   { code: 'input_chem', display_name: 'Chemical' },
-  { code: 'vc_crop_insurance', display_name: 'Crop/Hail Insurance' },
-  { code: 'vc_fuel', display_name: 'Fuel Oil' },
-  { code: 'vc_repairs', display_name: 'Repairs/Maint/Small Tools' },
-  { code: 'vc_agronomy', display_name: 'Agronomy' },
-  { code: 'vc_marketing', display_name: 'Marketing' },
-  { code: 'vc_meals', display_name: 'Meals/Entertainment' },
-  { code: 'vc_freight', display_name: 'Freight/Trucking' },
-  { code: 'vc_custom_work', display_name: 'Custom Work' },
-  { code: 'vc_variable_labour', display_name: 'Variable Labour' },
-  { code: 'vc_machinery_lease', display_name: 'Machinery Lease (Loans)' },
-  { code: 'fc_property_tax', display_name: 'Property Taxes' },
-  { code: 'fc_rent', display_name: 'Rent' },
-  { code: 'fc_interest_lt_debt', display_name: 'Interest Long-Term Debt' },
-  { code: 'fc_interest_machinery', display_name: 'Interest Machinery Leases/Loans' },
-  { code: 'fc_insurance', display_name: 'Insurance' },
-  { code: 'fc_utilities', display_name: 'Utilities' },
-  { code: 'fc_professional_fees', display_name: 'Professional Fees/Office' },
-  { code: 'fc_fixed_labour', display_name: 'Fixed Labour' },
-  { code: 'fc_building_repairs', display_name: 'Building Repairs/Maint' },
-  { code: 'fc_building_deprec', display_name: 'Building Depreciation' },
-  { code: 'fc_machinery_deprec', display_name: 'Machinery Depreciation' },
-  { code: 'fc_management_fee', display_name: 'Management Fee (Dividend)' },
-  { code: 'fc_income_tax', display_name: 'Income Tax Paid' },
-  { code: 'fc_operating_interest', display_name: 'Operating Interest' },
+  { code: 'lpm_personnel', display_name: 'Personnel' },
+  { code: 'lpm_fog', display_name: 'Fuel Oil Grease' },
+  { code: 'lpm_repairs', display_name: 'Repairs' },
+  { code: 'lpm_shop', display_name: 'Shop' },
+  { code: 'lbf_rent_interest', display_name: 'Rent & Interest' },
+  { code: 'ins_crop', display_name: 'Crop Insurance' },
+  { code: 'ins_other', display_name: 'Other Insurance' },
+  { code: 'rev_other_income', display_name: 'Other Income' },
 ];

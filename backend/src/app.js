@@ -12,6 +12,7 @@ import exportsRoutes from './routes/exports.js';
 import agronomyRoutes from './routes/agronomy.js';
 import farmRoutes from './routes/farms.js';
 import csvImportRoutes from './routes/csvImport.js';
+import chartOfAccountsRoutes from './routes/chartOfAccounts.js';
 import { errorHandler } from './middleware/errorHandler.js';
 import { authenticate, requireFarmAccess } from './middleware/auth.js';
 
@@ -36,6 +37,7 @@ app.use('/api/farms', exportsRoutes);
 app.use('/api/farms', agronomyRoutes);
 app.use('/api/farms', farmRoutes);
 app.use('/api/farms', csvImportRoutes);
+app.use('/api/farms', chartOfAccountsRoutes);
 
 app.get('/api/health', (_req, res) => {
   res.json({ status: 'ok', timestamp: new Date().toISOString() });

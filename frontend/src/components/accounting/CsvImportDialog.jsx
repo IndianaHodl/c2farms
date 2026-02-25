@@ -1,11 +1,11 @@
-import { useState, useMemo } from 'react';
+import { useState, useEffect, useMemo } from 'react';
 import {
   Dialog, DialogTitle, DialogContent, DialogActions, Button, Box, Typography,
   Table, TableHead, TableBody, TableRow, TableCell, Select, MenuItem, Alert,
   FormControl, InputLabel,
 } from '@mui/material';
 import { FISCAL_MONTHS } from '../../utils/fiscalYear';
-import { LEAF_CATEGORIES } from '../../utils/categoryList';
+import { fetchFarmCategories, LEAF_CATEGORIES } from '../../utils/categoryList';
 import api from '../../services/api';
 
 // Try to auto-detect which CSV column is the account name
@@ -54,6 +54,16 @@ export default function CsvImportDialog({ open, onClose, csvData, farmId, fiscal
   const [rowMapping, setRowMapping] = useState({});
   const [importing, setImporting] = useState(false);
   const [error, setError] = useState('');
+  const [leafCategories, setLeafCategories] = useState(LEAF_CATEGORIES);
+
+  // Load farm-specific categories
+  useEffect(() => {
+    if (farmId) {
+      fetchFarmCategories(farmId)
+        .then(cats => { if (cats.length > 0) setLeafCategories(cats); })
+        .catch(() => { /* keep static fallback */ });
+    }
+  }, [farmId]);
 
   // Columns that are mapped to a fiscal month
   const mappedMonthCols = useMemo(() =>
@@ -189,7 +199,7 @@ export default function CsvImportDialog({ open, onClose, csvData, farmId, fiscal
                         sx={{ minWidth: 180 }}
                       >
                         <MenuItem value="">Skip</MenuItem>
-                        {LEAF_CATEGORIES.map(c => (
+                        {leafCategories.map(c => (
                           <MenuItem key={c.code} value={c.code}>{c.display_name}</MenuItem>
                         ))}
                       </Select>

@@ -40,48 +40,52 @@ router.get('/:farmId/dashboard/:year', authenticate, async (req, res, next) => {
       frozenInputsTotal += (row.data_json?.inputs || 0);
     }
 
-    // Calculate KPIs
-    const actualRevenue = agg['sales_revenue'] || 0;
+    // Calculate KPIs using new category codes
+    const actualRevenue = agg['revenue'] || agg['sales_revenue'] || 0;
     const targetRevenue = crops.reduce((sum, c) => sum + (c.acres * c.target_yield * c.price_per_unit), 0);
     const yieldPct = targetRevenue > 0 ? (actualRevenue / targetRevenue) * 100 : 0;
 
     const totalInputs = agg['inputs'] || 0;
-    const totalVarCosts = agg['variable_costs'] || 0;
-    const totalFixedCosts = agg['fixed_costs'] || 0;
+    const totalLpm = agg['lpm'] || agg['variable_costs'] || 0;
+    const totalLbf = agg['lbf'] || agg['fixed_costs'] || 0;
+    const totalInsurance = agg['insurance'] || 0;
+    const totalExpense = totalInputs + totalLpm + totalLbf + totalInsurance;
 
     // Inputs adherence: compare actual inputs to frozen budget inputs
     const inputsAdherence = frozenInputsTotal > 0
       ? Math.min(100, (1 - Math.abs(totalInputs - frozenInputsTotal) / frozenInputsTotal) * 100)
       : 0;
 
-    const variableLabour = agg['vc_variable_labour'] || 0;
-    const fixedLabour = agg['fc_fixed_labour'] || 0;
-    const labourCostPerAcre = (variableLabour + fixedLabour) / totalAcres;
+    // Labour cost: use new lpm_personnel or fallback to old codes
+    const labourCost = agg['lpm_personnel'] || ((agg['vc_variable_labour'] || 0) + (agg['fc_fixed_labour'] || 0));
+    const labourCostPerAcre = labourCost / totalAcres;
 
     const machineryUptime = null; // No data source available yet
 
-    const grossMarginPerAcre = (actualRevenue - totalInputs - totalVarCosts) / totalAcres;
-    const cashFlowPerAcre = (actualRevenue - totalInputs - totalVarCosts - totalFixedCosts) / totalAcres;
+    const profitPerAcre = (actualRevenue - totalExpense) / totalAcres;
+    const cashFlowPerAcre = profitPerAcre; // Same in new structure (no separate gross margin)
 
     const kpis = [
       { label: 'Yield vs Target', value: yieldPct, unit: '%', gauge: true, target: 100, color: '#4caf50' },
       { label: 'Inputs Adherence', value: inputsAdherence, unit: '%', gauge: true, target: 100, color: '#2196f3' },
       { label: 'Labour Cost/Acre', value: labourCostPerAcre, unit: '$/ac', gauge: false, color: '#ff9800' },
       { label: 'Machinery Uptime', value: machineryUptime, unit: '%', gauge: true, target: 100, color: '#9c27b0', mock: true },
-      { label: 'Gross Margin/Acre', value: grossMarginPerAcre, unit: '$/ac', gauge: false, color: '#00bcd4' },
+      { label: 'Profit/Acre', value: profitPerAcre, unit: '$/ac', gauge: false, color: '#00bcd4' },
       { label: 'Cash Flow/Acre', value: cashFlowPerAcre, unit: '$/ac', gauge: false, color: '#f44336' },
     ];
 
-    // Budget vs Forecast chart data
+    // Budget vs Forecast chart data - use new category structure
     let chartData = { labels: [], budget: [], forecast: [] };
     try {
       const forecast = await calculateForecast(farmId, fiscalYear);
-      const majorCategories = ['sales_revenue', 'inputs', 'variable_costs', 'fixed_costs'];
+      const majorCategories = ['revenue', 'inputs', 'lpm', 'lbf', 'insurance'];
+      // Fallback labels for old codes
+      const labelMap = {
+        revenue: 'Revenue', inputs: 'Inputs', lpm: 'LPM', lbf: 'LBF', insurance: 'Insurance',
+        sales_revenue: 'Revenue', variable_costs: 'Variable', fixed_costs: 'Fixed',
+      };
       chartData = {
-        labels: majorCategories.map(c => {
-          const cat = { sales_revenue: 'Revenue', inputs: 'Inputs', variable_costs: 'Variable', fixed_costs: 'Fixed' };
-          return cat[c] || c;
-        }),
+        labels: majorCategories.map(c => labelMap[c] || c),
         budget: majorCategories.map(c => forecast[c]?.frozenBudgetTotal || 0),
         forecast: majorCategories.map(c => forecast[c]?.forecastTotal || 0),
       };

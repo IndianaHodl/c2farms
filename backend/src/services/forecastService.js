@@ -1,6 +1,6 @@
 import prisma from '../config/database.js';
 import { generateFiscalMonths, fiscalMonthIndex, getCurrentFiscalMonth } from '../utils/fiscalYear.js';
-import { LEAF_CATEGORIES, PARENT_CATEGORIES, getChildrenCodes } from '../utils/categories.js';
+import { getFarmLeafCategories, getFarmParentCategories, getChildrenCodes } from './categoryService.js';
 
 export async function calculateForecast(farmId, fiscalYear, startMonth) {
   // Look up startMonth from assumption if not provided
@@ -35,10 +35,14 @@ export async function calculateForecast(farmId, fiscalYear, startMonth) {
     frozenMap[row.month] = row.data_json || {};
   }
 
+  // Get farm-specific categories
+  const leafCategories = await getFarmLeafCategories(farmId);
+  const parentCategories = await getFarmParentCategories(farmId);
+
   // Build forecast per category
   const result = {};
 
-  for (const cat of LEAF_CATEGORIES) {
+  for (const cat of leafCategories) {
     const code = cat.code;
     let forecastTotal = 0;
     let currentAggregate = 0;
@@ -87,9 +91,9 @@ export async function calculateForecast(farmId, fiscalYear, startMonth) {
   }
 
   // Aggregate parent categories by summing their children (bottom-up by level)
-  const sortedParents = [...PARENT_CATEGORIES].sort((a, b) => b.level - a.level);
+  const sortedParents = [...parentCategories].sort((a, b) => b.level - a.level);
   for (const parent of sortedParents) {
-    const childCodes = getChildrenCodes(parent.code);
+    const childCodes = await getChildrenCodes(farmId, parent.code);
     let forecastTotal = 0;
     let currentAggregate = 0;
     let frozenBudgetTotal = 0;
