@@ -77,6 +77,35 @@ export default function CsvImportDialog({ open, onClose, csvData, farmId, fiscal
     return [...new Set(accounts)];
   }, [rows, accountCol]);
 
+  // Pre-populate row mappings from previously-imported GL accounts
+  useEffect(() => {
+    if (!farmId || csvAccounts.length === 0) return;
+    api.get(`/api/farms/${farmId}/gl-accounts`)
+      .then(resp => {
+        const glAccounts = resp.data?.glAccounts || [];
+        if (glAccounts.length === 0) return;
+        // Build lookup: account name/number → category code
+        const saved = {};
+        for (const gl of glAccounts) {
+          if (gl.category?.code) {
+            saved[gl.account_name] = gl.category.code;
+            saved[gl.account_number] = gl.category.code;
+          }
+        }
+        // Apply to any CSV accounts that match
+        setRowMapping(prev => {
+          const merged = { ...prev };
+          for (const acct of csvAccounts) {
+            if (!merged[acct] && saved[acct]) {
+              merged[acct] = saved[acct];
+            }
+          }
+          return merged;
+        });
+      })
+      .catch(() => { /* ignore - user can still map manually */ });
+  }, [farmId, csvAccounts]);
+
   const handleMonthMap = (csvCol, fiscalMonth) => {
     setMonthMapping(prev => ({ ...prev, [csvCol]: fiscalMonth || '' }));
   };
@@ -90,12 +119,16 @@ export default function CsvImportDialog({ open, onClose, csvData, farmId, fiscal
     setError('');
 
     try {
-      // Build import rows: group by month
-      const monthData = {};
+      // Build account-level detail: each CSV account becomes a GL account
+      const accountData = {};
       for (const row of rows) {
         const acctName = row[accountCol];
         const catCode = rowMapping[acctName];
         if (!catCode) continue;
+
+        if (!accountData[acctName]) {
+          accountData[acctName] = { category_code: catCode, months: {} };
+        }
 
         for (const [csvCol, fiscalMonth] of Object.entries(monthMapping)) {
           if (!fiscalMonth) continue;
@@ -105,28 +138,43 @@ export default function CsvImportDialog({ open, onClose, csvData, farmId, fiscal
           const val = parseFloat(String(rawVal).replace(/[$,]/g, '')) || 0;
           if (val === 0) continue;
 
-          if (!monthData[fiscalMonth]) monthData[fiscalMonth] = {};
-          monthData[fiscalMonth][catCode] = (monthData[fiscalMonth][catCode] || 0) + val;
+          accountData[acctName].months[fiscalMonth] =
+            (accountData[acctName].months[fiscalMonth] || 0) + val;
         }
       }
 
-      const importRows = Object.entries(monthData).map(([month, data]) => ({
-        fiscal_year: fiscalYear,
-        month,
-        data,
-      }));
+      const accounts = Object.entries(accountData)
+        .filter(([, data]) => Object.keys(data.months).length > 0)
+        .map(([name, data]) => ({
+          name,
+          category_code: data.category_code,
+          months: data.months,
+        }));
 
-      if (importRows.length === 0) {
+      if (accounts.length === 0) {
         setError('No data to import. Map at least one account row and one month column.');
         setImporting(false);
         return;
       }
 
-      await api.post(`/api/farms/${farmId}/accounting/import-csv`, { rows: importRows });
+      const payload = { fiscal_year: fiscalYear, accounts };
+      console.log('[CSV Import] Sending payload:', JSON.stringify(payload, null, 2));
+
+      const resp = await api.post(`/api/farms/${farmId}/accounting/import-csv`, payload);
+      const result = resp.data;
+
+      if (result.skipped > 0) {
+        console.warn(`[CSV Import] ${result.skipped} account(s) skipped:`, result.skippedDetails);
+      }
+      console.log(`[CSV Import] Success: imported ${result.imported} account(s) across ${result.months} month(s)`);
+
       onImportComplete?.();
       onClose();
     } catch (err) {
-      setError(err.response?.data?.error || 'Import failed');
+      console.error('[CSV Import] Error:', err.response?.data || err.message || err);
+      const data = err.response?.data;
+      const msg = data?.error || data?.message || err.message || 'Import failed';
+      setError(msg);
     } finally {
       setImporting(false);
     }
