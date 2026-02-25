@@ -1,10 +1,7 @@
 import { useState } from 'react';
-import { Typography, Box, Button, Alert, ToggleButtonGroup, ToggleButton } from '@mui/material';
+import { Typography, Box, Button, Alert } from '@mui/material';
 import SyncIcon from '@mui/icons-material/Sync';
-import ViewListIcon from '@mui/icons-material/ViewList';
-import SummarizeIcon from '@mui/icons-material/Summarize';
 import AccountingGrid from '../components/accounting/AccountingGrid';
-import GlDetailView from '../components/accounting/GlDetailView';
 import CashFlowSummary from '../components/accounting/CashFlowSummary';
 import ExportButtons from '../components/accounting/ExportButtons';
 import CsvImportButton from '../components/accounting/CsvImportButton';
@@ -18,7 +15,6 @@ export default function Accounting() {
   const [syncMessage, setSyncMessage] = useState('');
   const [syncing, setSyncing] = useState(false);
   const [refreshKey, setRefreshKey] = useState(0);
-  const [view, setView] = useState('executive');
 
   const handleSummaryLoaded = (newSummary, newMonths) => {
     setSummary(newSummary);
@@ -56,24 +52,9 @@ export default function Accounting() {
   return (
     <Box>
       <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 2 }}>
-        <Box sx={{ display: 'flex', alignItems: 'center', gap: 2 }}>
-          <Typography variant="h5">
-            Section 3: Accounting Operating Statement
-          </Typography>
-          <ToggleButtonGroup
-            value={view}
-            exclusive
-            onChange={(_, v) => { if (v) setView(v); }}
-            size="small"
-          >
-            <ToggleButton value="executive">
-              <SummarizeIcon sx={{ mr: 0.5, fontSize: 18 }} /> Executive
-            </ToggleButton>
-            <ToggleButton value="detail">
-              <ViewListIcon sx={{ mr: 0.5, fontSize: 18 }} /> Detail
-            </ToggleButton>
-          </ToggleButtonGroup>
-        </Box>
+        <Typography variant="h5">
+          Section 3: Accounting Operating Statement
+        </Typography>
         <Box sx={{ display: 'flex', gap: 2 }}>
           <CsvImportButton
             farmId={currentFarm.id}
@@ -102,24 +83,13 @@ export default function Accounting() {
         </Alert>
       )}
 
-      {view === 'executive' ? (
-        <>
-          <AccountingGrid
-            farmId={currentFarm.id}
-            fiscalYear={fiscalYear}
-            key={refreshKey}
-            onSummaryLoaded={handleSummaryLoaded}
-          />
-          <CashFlowSummary summary={summary} months={months} />
-        </>
-      ) : (
-        <GlDetailView
-          farmId={currentFarm.id}
-          fiscalYear={fiscalYear}
-          months={months}
-          key={`detail-${refreshKey}`}
-        />
-      )}
+      <AccountingGrid
+        farmId={currentFarm.id}
+        fiscalYear={fiscalYear}
+        key={refreshKey}
+        onSummaryLoaded={handleSummaryLoaded}
+      />
+      <CashFlowSummary summary={summary} months={months} />
     </Box>
   );
 }
