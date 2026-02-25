@@ -135,8 +135,9 @@ export default function CsvImportDialog({ open, onClose, csvData, farmId, fiscal
           const rawVal = row[csvCol];
           if (rawVal === undefined || rawVal === '') continue;
           // Parse number, removing commas and currency symbols
-          const val = parseFloat(String(rawVal).replace(/[$,]/g, '')) || 0;
-          if (val === 0) continue;
+          const cleaned = String(rawVal).replace(/[$,]/g, '').trim();
+          const val = cleaned === '' ? NaN : parseFloat(cleaned);
+          if (isNaN(val)) continue;
 
           accountData[acctName].months[fiscalMonth] =
             (accountData[acctName].months[fiscalMonth] || 0) + val;
@@ -144,7 +145,6 @@ export default function CsvImportDialog({ open, onClose, csvData, farmId, fiscal
       }
 
       const accounts = Object.entries(accountData)
-        .filter(([, data]) => Object.keys(data.months).length > 0)
         .map(([name, data]) => ({
           name,
           category_code: data.category_code,
@@ -182,6 +182,33 @@ export default function CsvImportDialog({ open, onClose, csvData, farmId, fiscal
 
   const mappedRowCount = Object.values(rowMapping).filter(Boolean).length;
   const mappedMonthCount = Object.values(monthMapping).filter(Boolean).length;
+
+  // Category summary: aggregate mapped accounts by category
+  const categorySummary = useMemo(() => {
+    const summary = {};
+    for (const acct of csvAccounts) {
+      const catCode = rowMapping[acct];
+      if (!catCode) continue;
+      if (!summary[catCode]) {
+        const cat = leafCategories.find(c => c.code === catCode);
+        summary[catCode] = { name: cat?.display_name || catCode, accounts: 0, monthTotals: {} };
+      }
+      summary[catCode].accounts++;
+      // Sum this account's values into the category
+      const csvRow = rows.find(r => r[accountCol] === acct);
+      if (csvRow) {
+        for (const [csvCol, fiscalMonth] of mappedMonthCols) {
+          const rawVal = csvRow[csvCol];
+          if (rawVal === undefined || rawVal === '') continue;
+          const cleaned = String(rawVal).replace(/[$,]/g, '').trim();
+          const val = cleaned === '' ? NaN : parseFloat(cleaned);
+          if (isNaN(val)) continue;
+          summary[catCode].monthTotals[fiscalMonth] = (summary[catCode].monthTotals[fiscalMonth] || 0) + val;
+        }
+      }
+    }
+    return summary;
+  }, [csvAccounts, rowMapping, rows, accountCol, mappedMonthCols, leafCategories]);
 
   return (
     <Dialog open={open} onClose={onClose} maxWidth="lg" fullWidth>
@@ -263,6 +290,42 @@ export default function CsvImportDialog({ open, onClose, csvData, farmId, fiscal
             </TableBody>
           </Table>
         </Box>
+        {/* Category summary preview */}
+        {Object.keys(categorySummary).length > 0 && (
+          <>
+            <Typography variant="subtitle2" sx={{ mt: 3, mb: 1 }}>
+              Category Summary (totals after rollup)
+            </Typography>
+            <Box sx={{ maxHeight: 200, overflow: 'auto' }}>
+              <Table size="small" stickyHeader>
+                <TableHead>
+                  <TableRow>
+                    <TableCell>Category</TableCell>
+                    <TableCell align="right">GL Accounts</TableCell>
+                    {mappedMonthCols.map(([col, fm]) => (
+                      <TableCell key={col} align="right">{fm}</TableCell>
+                    ))}
+                  </TableRow>
+                </TableHead>
+                <TableBody>
+                  {Object.entries(categorySummary).map(([code, data]) => (
+                    <TableRow key={code}>
+                      <TableCell>{data.name}</TableCell>
+                      <TableCell align="right">{data.accounts}</TableCell>
+                      {mappedMonthCols.map(([, fm]) => (
+                        <TableCell key={fm} align="right">
+                          {data.monthTotals[fm] != null
+                            ? `$${data.monthTotals[fm].toLocaleString(undefined, { minimumFractionDigits: 0, maximumFractionDigits: 0 })}`
+                            : ''}
+                        </TableCell>
+                      ))}
+                    </TableRow>
+                  ))}
+                </TableBody>
+              </Table>
+            </Box>
+          </>
+        )}
       </DialogContent>
       <DialogActions>
         <Button onClick={onClose}>Cancel</Button>

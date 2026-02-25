@@ -1,6 +1,7 @@
 import { useState } from 'react';
-import { Typography, Box, Button, Alert } from '@mui/material';
+import { Typography, Box, Button, Alert, Dialog, DialogTitle, DialogContent, DialogContentText, DialogActions } from '@mui/material';
 import SyncIcon from '@mui/icons-material/Sync';
+import DeleteSweepIcon from '@mui/icons-material/DeleteSweep';
 import AccountingGrid from '../components/accounting/AccountingGrid';
 import CashFlowSummary from '../components/accounting/CashFlowSummary';
 import ExportButtons from '../components/accounting/ExportButtons';
@@ -15,6 +16,8 @@ export default function Accounting() {
   const [syncMessage, setSyncMessage] = useState('');
   const [syncing, setSyncing] = useState(false);
   const [refreshKey, setRefreshKey] = useState(0);
+  const [clearDialogOpen, setClearDialogOpen] = useState(false);
+  const [clearing, setClearing] = useState(false);
 
   const handleSummaryLoaded = (newSummary, newMonths) => {
     setSummary(newSummary);
@@ -41,6 +44,22 @@ export default function Accounting() {
     }
   };
 
+  const handleClearYear = async () => {
+    setClearing(true);
+    try {
+      const res = await api.delete(`/api/farms/${currentFarm.id}/accounting/clear-year`, {
+        data: { fiscal_year: fiscalYear },
+      });
+      setSyncMessage(res.data.message);
+      setRefreshKey(k => k + 1);
+    } catch {
+      setSyncMessage('Failed to clear year data.');
+    } finally {
+      setClearing(false);
+      setClearDialogOpen(false);
+    }
+  };
+
   if (!currentFarm) {
     return (
       <Box sx={{ p: 3 }}>
@@ -56,6 +75,14 @@ export default function Accounting() {
           Section 3: Accounting Operating Statement
         </Typography>
         <Box sx={{ display: 'flex', gap: 2 }}>
+          <Button
+            variant="outlined"
+            color="error"
+            startIcon={<DeleteSweepIcon />}
+            onClick={() => setClearDialogOpen(true)}
+          >
+            Clear Year
+          </Button>
           <CsvImportButton
             farmId={currentFarm.id}
             fiscalYear={fiscalYear}
@@ -90,6 +117,22 @@ export default function Accounting() {
         onSummaryLoaded={handleSummaryLoaded}
       />
       <CashFlowSummary summary={summary} months={months} />
+
+      <Dialog open={clearDialogOpen} onClose={() => setClearDialogOpen(false)}>
+        <DialogTitle>Clear Year Data</DialogTitle>
+        <DialogContent>
+          <DialogContentText>
+            Clear all imported accounting data for FY {fiscalYear}? This will remove all GL detail
+            and reset monthly data to zero. This cannot be undone.
+          </DialogContentText>
+        </DialogContent>
+        <DialogActions>
+          <Button onClick={() => setClearDialogOpen(false)}>Cancel</Button>
+          <Button onClick={handleClearYear} color="error" variant="contained" disabled={clearing}>
+            {clearing ? 'Clearing...' : 'Clear Year Data'}
+          </Button>
+        </DialogActions>
+      </Dialog>
     </Box>
   );
 }

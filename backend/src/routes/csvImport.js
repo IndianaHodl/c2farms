@@ -26,6 +26,16 @@ router.post('/:farmId/accounting/import-csv', authenticate, async (req, res, nex
     const fy = parseInt(fiscal_year);
     console.log(`[CSV Import] farmId=${farmId}, FY=${fy}, ${accounts.length} account(s)`);
 
+    // Validate that assumptions exist for this fiscal year (needed for per-unit calculations)
+    const assumption = await prisma.assumption.findUnique({
+      where: { farm_id_fiscal_year: { farm_id: farmId, fiscal_year: fy } },
+    });
+    if (!assumption) {
+      return res.status(400).json({
+        error: `No assumptions found for FY ${fy}. Please set up assumptions (acres, crops) before importing.`,
+      });
+    }
+
     // Get farm's leaf categories for validation
     const leafCategories = await getFarmLeafCategories(farmId);
     const leafCodes = new Set(leafCategories.map(c => c.code));
@@ -117,6 +127,45 @@ router.post('/:farmId/accounting/import-csv', authenticate, async (req, res, nex
     });
   } catch (err) {
     console.error('[CSV Import] Error:', err);
+    next(err);
+  }
+});
+
+// DELETE /:farmId/accounting/clear-year
+// Body: { fiscal_year }
+// Clears all GL actual details and resets MonthlyData for a farm + fiscal year.
+router.delete('/:farmId/accounting/clear-year', authenticate, async (req, res, next) => {
+  try {
+    const { farmId } = req.params;
+    const { fiscal_year } = req.body;
+
+    if (!fiscal_year) {
+      return res.status(400).json({ error: 'fiscal_year is required' });
+    }
+
+    const fy = parseInt(fiscal_year);
+    console.log(`[Clear Year] farmId=${farmId}, FY=${fy}`);
+
+    // Delete all GL actual detail records for this farm + year
+    const deletedDetails = await prisma.glActualDetail.deleteMany({
+      where: { farm_id: farmId, fiscal_year: fy },
+    });
+
+    // Reset MonthlyData for both accounting and per_unit types
+    const updatedMonthly = await prisma.monthlyData.updateMany({
+      where: { farm_id: farmId, fiscal_year: fy, type: { in: ['accounting', 'per_unit'] } },
+      data: { data_json: {}, is_actual: false },
+    });
+
+    console.log(`[Clear Year] Deleted ${deletedDetails.count} GL details, reset ${updatedMonthly.count} monthly records`);
+
+    res.json({
+      message: `Cleared FY ${fy}: ${deletedDetails.count} GL detail(s) removed, ${updatedMonthly.count} monthly record(s) reset`,
+      deletedDetails: deletedDetails.count,
+      resetMonthly: updatedMonthly.count,
+    });
+  } catch (err) {
+    console.error('[Clear Year] Error:', err);
     next(err);
   }
 });

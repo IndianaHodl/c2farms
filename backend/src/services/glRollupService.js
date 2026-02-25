@@ -56,6 +56,9 @@ export async function rollupGlActuals(farmId, fiscalYear, month) {
   const assumption = await prisma.assumption.findUnique({
     where: { farm_id_fiscal_year: { farm_id: farmId, fiscal_year: fiscalYear } },
   });
+  if (!assumption) {
+    console.warn(`[GL Rollup] No assumption record for farm=${farmId} FY=${fiscalYear}. Per-unit will divide by 1 (showing raw dollar amounts).`);
+  }
   const totalAcres = assumption?.total_acres || 1;
 
   const perUnitData = {};
