@@ -13,6 +13,7 @@ function mockModel() {
     delete: vi.fn(),
     deleteMany: vi.fn(),
     count: vi.fn(),
+    aggregate: vi.fn(),
   };
 }
 

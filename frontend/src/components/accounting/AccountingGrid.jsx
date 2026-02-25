@@ -156,25 +156,9 @@ export default function AccountingGrid({ farmId, fiscalYear, onSummaryLoaded }) 
 
     cols.push(
       {
-        headerName: 'Total',
-        field: 'total',
+        headerName: 'Budget',
+        field: 'frozenBudgetTotal',
         width: 120,
-        type: 'numericColumn',
-        valueFormatter: (params) => {
-          if (isLevel0OrComputed(params)) return formatCurrency(params.value, 0);
-          return formatNumber(params.value, 0);
-        },
-        cellStyle: (params) => ({
-          fontWeight: 'bold',
-          backgroundColor: params.data?.isComputed ? colors.totalComputedBg : colors.totalBg,
-          color: params.data?.isComputed && (params.value || 0) < 0 ? colors.negativeText : undefined,
-          borderTop: isLevel0OrComputed(params) ? `2px solid ${colors.computedBorder}` : undefined,
-        }),
-      },
-      {
-        headerName: 'Cur. Agg',
-        field: 'currentAggregate',
-        width: 110,
         type: 'numericColumn',
         valueFormatter: (params) => formatCurrency(params.value, 0),
         cellStyle: (params) => ({

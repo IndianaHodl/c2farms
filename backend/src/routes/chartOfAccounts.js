@@ -61,6 +61,7 @@ router.post('/:farmId/categories', authenticate, async (req, res, next) => {
     let parentId = null;
     let level = 0;
     let path = code;
+    let calculatedSortOrder;
 
     if (parent_code) {
       const parent = await prisma.farmCategory.findUnique({
@@ -70,6 +71,22 @@ router.post('/:farmId/categories', authenticate, async (req, res, next) => {
       parentId = parent.id;
       level = parent.level + 1;
       path = `${parent.path}.${code}`;
+
+      // Auto-calculate sort_order: max sibling + 1, or parent + 1 if no siblings
+      const maxSibling = await prisma.farmCategory.aggregate({
+        where: { farm_id: farmId, parent_id: parent.id },
+        _max: { sort_order: true },
+      });
+      calculatedSortOrder = maxSibling._max.sort_order != null
+        ? maxSibling._max.sort_order + 1
+        : parent.sort_order + 1;
+    } else {
+      // Top-level: max sort_order + 100
+      const maxAll = await prisma.farmCategory.aggregate({
+        where: { farm_id: farmId },
+        _max: { sort_order: true },
+      });
+      calculatedSortOrder = (maxAll._max.sort_order ?? 0) + 100;
     }
 
     const category = await prisma.farmCategory.create({
@@ -80,7 +97,7 @@ router.post('/:farmId/categories', authenticate, async (req, res, next) => {
         parent_id: parentId,
         path,
         level,
-        sort_order: sort_order || 0,
+        sort_order: calculatedSortOrder,
         category_type,
       },
     });

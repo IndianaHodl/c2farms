@@ -78,6 +78,8 @@ router.get('/:farmId/per-unit/:year', authenticate, async (req, res, next) => {
       // Forecast may fail if no frozen data
     }
 
+    const isFrozenPU = assumption?.is_frozen || false;
+
     // Build response rows per category
     const rows = farmCategories.map(cat => {
       const monthValues = {};
@@ -94,6 +96,12 @@ router.get('/:farmId/per-unit/:year', authenticate, async (req, res, next) => {
       }
 
       const fc = forecast[cat.code] || {};
+      const forecastVal = fc.forecastTotal ?? currentAgg;
+      const budgetVal = isFrozenPU
+        ? (fc.frozenBudgetTotal ?? 0)
+        : forecastVal;
+      const varianceVal = forecastVal - budgetVal;
+      const pctDiffVal = budgetVal !== 0 ? (varianceVal / Math.abs(budgetVal)) * 100 : 0;
 
       return {
         code: cat.code,
@@ -109,10 +117,10 @@ router.get('/:farmId/per-unit/:year', authenticate, async (req, res, next) => {
         actuals: monthActuals,
         comments: monthComments,
         currentAggregate: fc.currentAggregate ?? currentAgg,
-        forecastTotal: fc.forecastTotal ?? currentAgg,
-        frozenBudgetTotal: fc.frozenBudgetTotal ?? 0,
-        variance: fc.variance ?? 0,
-        pctDiff: fc.pctDiff ?? 0,
+        forecastTotal: forecastVal,
+        frozenBudgetTotal: budgetVal,
+        variance: varianceVal,
+        pctDiff: pctDiffVal,
       };
     });
 
@@ -307,6 +315,8 @@ router.get('/:farmId/accounting/:year', authenticate, async (req, res, next) => 
       monthActualMap[row.month] = row.is_actual || false;
     }
 
+    const isFrozen = assumption?.is_frozen || false;
+
     const rows = farmCategories.map(cat => {
       const monthValues = {};
       const actuals = {};
@@ -319,6 +329,12 @@ router.get('/:farmId/accounting/:year', authenticate, async (req, res, next) => 
       }
 
       const fc = forecast[cat.code] || {};
+      const forecastVal = fc.forecastTotal != null ? fc.forecastTotal * totalAcres : total;
+      const budgetVal = isFrozen
+        ? (fc.frozenBudgetTotal != null ? fc.frozenBudgetTotal * totalAcres : 0)
+        : forecastVal;
+      const varianceVal = forecastVal - budgetVal;
+      const pctDiffVal = budgetVal !== 0 ? (varianceVal / Math.abs(budgetVal)) * 100 : 0;
 
       return {
         code: cat.code,
@@ -333,11 +349,10 @@ router.get('/:farmId/accounting/:year', authenticate, async (req, res, next) => 
         actuals,
         total,
         priorYear: priorYearAgg[cat.code] || 0,
-        currentAggregate: fc.currentAggregate != null ? fc.currentAggregate * totalAcres : 0,
-        forecastTotal: fc.forecastTotal != null ? fc.forecastTotal * totalAcres : total,
-        frozenBudgetTotal: fc.frozenBudgetTotal != null ? fc.frozenBudgetTotal * totalAcres : 0,
-        variance: fc.variance != null ? fc.variance * totalAcres : 0,
-        pctDiff: fc.pctDiff ?? 0,
+        forecastTotal: forecastVal,
+        frozenBudgetTotal: budgetVal,
+        variance: varianceVal,
+        pctDiff: pctDiffVal,
       };
     });
 
@@ -369,7 +384,9 @@ router.get('/:farmId/accounting/:year', authenticate, async (req, res, next) => 
       }
 
       const totalExpForecast = expenseRows.reduce((sum, r) => sum + (r.forecastTotal || 0), 0);
-      const totalExpFrozen = expenseRows.reduce((sum, r) => sum + (r.frozenBudgetTotal || 0), 0);
+      const totalExpBudget = expenseRows.reduce((sum, r) => sum + (r.frozenBudgetTotal || 0), 0);
+      const totalExpVariance = totalExpForecast - totalExpBudget;
+      const totalExpPctDiff = totalExpBudget !== 0 ? (totalExpVariance / Math.abs(totalExpBudget)) * 100 : 0;
 
       rows.push({
         code: '_total_expense',
@@ -383,11 +400,10 @@ router.get('/:farmId/accounting/:year', authenticate, async (req, res, next) => 
         total: totalExpTotal,
         priorYear: expenseRows.reduce((sum, r) => sum + (r.priorYear || 0), 0),
         isComputed: true,
-        currentAggregate: totalExpTotal,
         forecastTotal: totalExpForecast,
-        frozenBudgetTotal: totalExpFrozen,
-        variance: totalExpForecast - totalExpFrozen,
-        pctDiff: totalExpFrozen !== 0 ? ((totalExpForecast - totalExpFrozen) / Math.abs(totalExpFrozen)) * 100 : 0,
+        frozenBudgetTotal: totalExpBudget,
+        variance: totalExpVariance,
+        pctDiff: totalExpPctDiff,
       });
 
       // Profit computed row
@@ -400,7 +416,9 @@ router.get('/:farmId/accounting/:year', authenticate, async (req, res, next) => 
       }
 
       const profitForecast = (revenueRow.forecastTotal || 0) - totalExpForecast;
-      const profitFrozen = (revenueRow.frozenBudgetTotal || 0) - totalExpFrozen;
+      const profitBudget = (revenueRow.frozenBudgetTotal || 0) - totalExpBudget;
+      const profitVariance = profitForecast - profitBudget;
+      const profitPctDiff = profitBudget !== 0 ? (profitVariance / Math.abs(profitBudget)) * 100 : 0;
 
       rows.push({
         code: '_profit',
@@ -414,11 +432,10 @@ router.get('/:farmId/accounting/:year', authenticate, async (req, res, next) => 
         total: profitTotal,
         priorYear: (revenueRow.priorYear || 0) - expenseRows.reduce((sum, r) => sum + (r.priorYear || 0), 0),
         isComputed: true,
-        currentAggregate: profitTotal,
         forecastTotal: profitForecast,
-        frozenBudgetTotal: profitFrozen,
-        variance: profitForecast - profitFrozen,
-        pctDiff: profitFrozen !== 0 ? ((profitForecast - profitFrozen) / Math.abs(profitFrozen)) * 100 : 0,
+        frozenBudgetTotal: profitBudget,
+        variance: profitVariance,
+        pctDiff: profitPctDiff,
       });
     }
 

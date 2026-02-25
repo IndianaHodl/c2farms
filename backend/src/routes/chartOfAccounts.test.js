@@ -297,6 +297,7 @@ describe('POST /api/farms/:farmId/categories', () => {
   });
 
   it('creates category successfully', async () => {
+    prismaMock.farmCategory.aggregate.mockResolvedValue({ _max: { sort_order: 400 } });
     prismaMock.farmCategory.create.mockResolvedValue({
       id: 'cat-new',
       code: 'test_cat',
@@ -315,6 +316,7 @@ describe('POST /api/farms/:farmId/categories', () => {
   });
 
   it('returns 409 on duplicate code', async () => {
+    prismaMock.farmCategory.aggregate.mockResolvedValue({ _max: { sort_order: 400 } });
     prismaMock.farmCategory.create.mockRejectedValue({ code: 'P2002' });
 
     const res = await request(app)
