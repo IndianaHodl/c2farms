@@ -112,19 +112,19 @@ describe('rollupGlActuals', () => {
     expect(result.perUnit.input_seed).toBe(500);
   });
 
-  it('merges with existing manual data', async () => {
+  it('zeroes leaf categories without GL data during rollup', async () => {
     prismaMock.glActualDetail.findMany.mockResolvedValue([
       { amount: 100, gl_account: { category: { code: 'input_seed' } } },
     ]);
     prismaMock.monthlyData.findUnique.mockResolvedValue({
-      data_json: { input_fert: 200 }, // manually entered
+      data_json: { input_fert: 200 }, // previously entered, but no GL data now
     });
     prismaMock.monthlyData.upsert.mockResolvedValue({});
 
     const result = await rollupGlActuals(FARM_ID, FY, MONTH);
 
-    // GL data overwrites input_seed, manual input_fert preserved
+    // GL data sets input_seed; input_fert zeroed (no GL source)
     expect(result.accounting.input_seed).toBe(100);
-    expect(result.accounting.input_fert).toBe(200);
+    expect(result.accounting.input_fert).toBe(0);
   });
 });

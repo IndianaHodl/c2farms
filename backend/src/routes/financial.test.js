@@ -16,6 +16,7 @@ vi.mock('../middleware/auth.js', () => ({
     _req.farmRole = 'admin';
     next();
   },
+  requireRole: () => (_req, _res, next) => next(),
 }));
 
 vi.mock('../services/calculationService.js', () => ({
