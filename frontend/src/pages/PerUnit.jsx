@@ -16,7 +16,7 @@ export default function PerUnit() {
   return (
     <Box>
       <Typography variant="h5" sx={{ mb: 2 }}>
-        Section 2: Per-Unit Analysis ($/acre)
+        Section 3: Per-Unit Analysis ($/acre)
       </Typography>
       <PerUnitGrid farmId={currentFarm.id} fiscalYear={fiscalYear} />
     </Box>

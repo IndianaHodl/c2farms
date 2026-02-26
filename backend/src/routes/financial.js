@@ -73,7 +73,7 @@ router.get('/:farmId/per-unit/:year', authenticate, async (req, res, next) => {
     const isFrozenPU = assumption?.is_frozen || false;
 
     // Build response rows per category
-    const rows = farmCategories.map(cat => {
+    const allRows = farmCategories.map(cat => {
       const monthValues = {};
       const monthActuals = {};
       const monthComments = {};
@@ -119,28 +119,29 @@ router.get('/:farmId/per-unit/:year', authenticate, async (req, res, next) => {
       };
     });
 
-    // Compute profit row: revenue - all expenses
-    const revenueRow = rows.find(r => r.code === 'revenue');
-    const inputsRow = rows.find(r => r.code === 'inputs');
-    const lpmRow = rows.find(r => r.code === 'lpm');
-    const lbfRow = rows.find(r => r.code === 'lbf');
-    const insuranceRow = rows.find(r => r.code === 'insurance');
+    // Filter to expense-only categories (exclude revenue and its children)
+    const rows = allRows.filter(r => {
+      if (r.code === 'revenue' || r.parent_code === 'revenue') return false;
+      if (r.code?.startsWith('rev_')) return false;
+      return true;
+    });
 
-    const expenseRows = [inputsRow, lpmRow, lbfRow, insuranceRow].filter(Boolean);
+    // Compute Total Expense row from expense parent categories
+    const expenseParentRows = rows.filter(r => ['inputs', 'lpm', 'lbf', 'insurance'].includes(r.code));
 
-    if (revenueRow && expenseRows.length > 0) {
-      // Total Expense computed row
+    if (expenseParentRows.length > 0) {
       const totalExpMonths = {};
       let totalExpAgg = 0;
       for (const month of months) {
-        const val = expenseRows.reduce((sum, r) => sum + (r.months[month] || 0), 0);
+        const val = expenseParentRows.reduce((sum, r) => sum + (r.months[month] || 0), 0);
         totalExpMonths[month] = val;
         totalExpAgg += val;
       }
 
-      const totalExpForecast = expenseRows.reduce((sum, r) => sum + (r.forecastTotal || 0), 0);
-      const totalExpFrozen = expenseRows.reduce((sum, r) => sum + (r.frozenBudgetTotal || 0), 0);
+      const totalExpForecast = expenseParentRows.reduce((sum, r) => sum + (r.forecastTotal || 0), 0);
+      const totalExpFrozen = expenseParentRows.reduce((sum, r) => sum + (r.frozenBudgetTotal || 0), 0);
 
+      const firstRow = rows[0];
       rows.push({
         code: '_total_expense',
         display_name: 'Total Expense',
@@ -148,9 +149,9 @@ router.get('/:farmId/per-unit/:year', authenticate, async (req, res, next) => {
         parent_code: null,
         category_type: 'COMPUTED',
         sort_order: 998,
-        priorYear: expenseRows.reduce((sum, r) => sum + (r.priorYear || 0), 0),
+        priorYear: expenseParentRows.reduce((sum, r) => sum + (r.priorYear || 0), 0),
         months: totalExpMonths,
-        actuals: revenueRow.actuals,
+        actuals: firstRow?.actuals || {},
         comments: {},
         isComputed: true,
         currentAggregate: totalExpAgg,
@@ -158,37 +159,6 @@ router.get('/:farmId/per-unit/:year', authenticate, async (req, res, next) => {
         frozenBudgetTotal: totalExpFrozen,
         variance: totalExpForecast - totalExpFrozen,
         pctDiff: totalExpFrozen !== 0 ? ((totalExpForecast - totalExpFrozen) / Math.abs(totalExpFrozen)) * 100 : 0,
-      });
-
-      // Profit computed row
-      const profitMonths = {};
-      let profitAgg = 0;
-      for (const month of months) {
-        const val = (revenueRow.months[month] || 0) - (totalExpMonths[month] || 0);
-        profitMonths[month] = val;
-        profitAgg += val;
-      }
-
-      const profitForecast = (revenueRow.forecastTotal || 0) - totalExpForecast;
-      const profitFrozen = (revenueRow.frozenBudgetTotal || 0) - totalExpFrozen;
-
-      rows.push({
-        code: '_profit',
-        display_name: 'Profit',
-        level: -1,
-        parent_code: null,
-        category_type: 'COMPUTED',
-        sort_order: 999,
-        priorYear: (revenueRow.priorYear || 0) - expenseRows.reduce((sum, r) => sum + (r.priorYear || 0), 0),
-        months: profitMonths,
-        actuals: revenueRow.actuals,
-        comments: {},
-        isComputed: true,
-        currentAggregate: profitAgg,
-        forecastTotal: profitForecast,
-        frozenBudgetTotal: profitFrozen,
-        variance: profitForecast - profitFrozen,
-        pctDiff: profitFrozen !== 0 ? ((profitForecast - profitFrozen) / Math.abs(profitFrozen)) * 100 : 0,
       });
     }
 
@@ -306,7 +276,7 @@ router.get('/:farmId/accounting/:year', authenticate, async (req, res, next) => 
 
     const isFrozen = assumption?.is_frozen || false;
 
-    const rows = farmCategories.map(cat => {
+    const allRows = farmCategories.map(cat => {
       const monthValues = {};
       const actuals = {};
       let total = 0;
@@ -348,38 +318,37 @@ router.get('/:farmId/accounting/:year', authenticate, async (req, res, next) => 
       };
     });
 
-    // Compute summary and computed rows
-    const revenueRow = rows.find(r => r.code === 'revenue');
-    const inputsRow = rows.find(r => r.code === 'inputs');
-    const lpmRow = rows.find(r => r.code === 'lpm');
-    const lbfRow = rows.find(r => r.code === 'lbf');
-    const insuranceRow = rows.find(r => r.code === 'insurance');
+    // Filter to expense-only categories (exclude revenue and its children)
+    const rows = allRows.filter(r => {
+      if (r.code === 'revenue' || r.parent_code === 'revenue') return false;
+      if (r.code?.startsWith('rev_')) return false;
+      return true;
+    });
 
-    const expenseRows = [inputsRow, lpmRow, lbfRow, insuranceRow].filter(Boolean);
+    // Compute summary and Total Expense computed row
+    const expenseParentRows = rows.filter(r => ['inputs', 'lpm', 'lbf', 'insurance'].includes(r.code));
 
     const summaryByMonth = {};
     for (const month of months) {
-      const revenue = revenueRow ? (monthMap[month]?.[revenueRow.code] || 0) : 0;
-      const totalExpense = expenseRows.reduce((sum, r) => sum + (monthMap[month]?.[r.code] || 0), 0);
-      const profit = revenue - totalExpense;
-      summaryByMonth[month] = { revenue, totalExpense, profit };
+      const totalExpense = expenseParentRows.reduce((sum, r) => sum + (monthMap[month]?.[r.code] || 0), 0);
+      summaryByMonth[month] = { totalExpense };
     }
 
-    // Push computed rows (Total Expense, Profit) into rows for grid display
-    if (revenueRow && expenseRows.length > 0) {
+    if (expenseParentRows.length > 0) {
       const totalExpMonths = {};
       let totalExpTotal = 0;
       for (const month of months) {
-        const val = expenseRows.reduce((sum, r) => sum + (r.months[month] || 0), 0);
+        const val = expenseParentRows.reduce((sum, r) => sum + (r.months[month] || 0), 0);
         totalExpMonths[month] = val;
         totalExpTotal += val;
       }
 
-      const totalExpForecast = expenseRows.reduce((sum, r) => sum + (r.forecastTotal || 0), 0);
-      const totalExpBudget = expenseRows.reduce((sum, r) => sum + (r.frozenBudgetTotal || 0), 0);
+      const totalExpForecast = expenseParentRows.reduce((sum, r) => sum + (r.forecastTotal || 0), 0);
+      const totalExpBudget = expenseParentRows.reduce((sum, r) => sum + (r.frozenBudgetTotal || 0), 0);
       const totalExpVariance = totalExpForecast - totalExpBudget;
       const totalExpPctDiff = totalExpBudget !== 0 ? (totalExpVariance / Math.abs(totalExpBudget)) * 100 : 0;
 
+      const firstRow = rows[0];
       rows.push({
         code: '_total_expense',
         display_name: 'Total Expense',
@@ -388,46 +357,14 @@ router.get('/:farmId/accounting/:year', authenticate, async (req, res, next) => 
         category_type: 'COMPUTED',
         sort_order: 998,
         months: totalExpMonths,
-        actuals: revenueRow.actuals,
+        actuals: firstRow?.actuals || {},
         total: totalExpTotal,
-        priorYear: expenseRows.reduce((sum, r) => sum + (r.priorYear || 0), 0),
+        priorYear: expenseParentRows.reduce((sum, r) => sum + (r.priorYear || 0), 0),
         isComputed: true,
         forecastTotal: totalExpForecast,
         frozenBudgetTotal: totalExpBudget,
         variance: totalExpVariance,
         pctDiff: totalExpPctDiff,
-      });
-
-      // Profit computed row
-      const profitMonths = {};
-      let profitTotal = 0;
-      for (const month of months) {
-        const val = (revenueRow.months[month] || 0) - (totalExpMonths[month] || 0);
-        profitMonths[month] = val;
-        profitTotal += val;
-      }
-
-      const profitForecast = (revenueRow.forecastTotal || 0) - totalExpForecast;
-      const profitBudget = (revenueRow.frozenBudgetTotal || 0) - totalExpBudget;
-      const profitVariance = profitForecast - profitBudget;
-      const profitPctDiff = profitBudget !== 0 ? (profitVariance / Math.abs(profitBudget)) * 100 : 0;
-
-      rows.push({
-        code: '_profit',
-        display_name: 'Profit',
-        level: -1,
-        parent_code: null,
-        category_type: 'COMPUTED',
-        sort_order: 999,
-        months: profitMonths,
-        actuals: revenueRow.actuals,
-        total: profitTotal,
-        priorYear: (revenueRow.priorYear || 0) - expenseRows.reduce((sum, r) => sum + (r.priorYear || 0), 0),
-        isComputed: true,
-        forecastTotal: profitForecast,
-        frozenBudgetTotal: profitBudget,
-        variance: profitVariance,
-        pctDiff: profitPctDiff,
       });
     }
 

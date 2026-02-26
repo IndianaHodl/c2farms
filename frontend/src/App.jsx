@@ -57,7 +57,8 @@ export default function App() {
                       <Route path="/" element={<Navigate to="/assumptions" />} />
                       <Route path="/assumptions" element={<Assumptions />} />
                       <Route path="/per-unit" element={<PerUnit />} />
-                      <Route path="/accounting" element={<Accounting />} />
+                      <Route path="/cost-forecast" element={<Accounting />} />
+                      <Route path="/accounting" element={<Navigate to="/cost-forecast" />} />
                       <Route path="/dashboard" element={<Dashboard />} />
                       <Route path="/chart-of-accounts" element={<ChartOfAccounts />} />
                       <Route path="/settings" element={<AdminRoute><Settings /></AdminRoute>} />

@@ -1,6 +1,5 @@
 import { useState } from 'react';
 import { Typography, Box, Button, Alert, Dialog, DialogTitle, DialogContent, DialogContentText, DialogActions } from '@mui/material';
-import SyncIcon from '@mui/icons-material/Sync';
 import DeleteSweepIcon from '@mui/icons-material/DeleteSweep';
 import AccountingGrid from '../components/accounting/AccountingGrid';
 import CashFlowSummary from '../components/accounting/CashFlowSummary';
@@ -14,7 +13,6 @@ export default function Accounting() {
   const [summary, setSummary] = useState({});
   const [months, setMonths] = useState(null);
   const [syncMessage, setSyncMessage] = useState('');
-  const [syncing, setSyncing] = useState(false);
   const [refreshKey, setRefreshKey] = useState(0);
   const [clearDialogOpen, setClearDialogOpen] = useState(false);
   const [clearing, setClearing] = useState(false);
@@ -22,26 +20,6 @@ export default function Accounting() {
   const handleSummaryLoaded = (newSummary, newMonths) => {
     setSummary(newSummary);
     if (newMonths) setMonths(newMonths);
-  };
-
-  const handleQBSync = async () => {
-    setSyncing(true);
-    setSyncMessage('');
-    try {
-      const res = await api.post(`/api/farms/${currentFarm.id}/quickbooks/sync`, {
-        fiscal_year: fiscalYear,
-      });
-      if (res.data.fallback) {
-        setSyncMessage(res.data.message);
-      } else {
-        setSyncMessage('QuickBooks sync completed successfully');
-        setRefreshKey(k => k + 1);
-      }
-    } catch {
-      setSyncMessage('QuickBooks sync failed. Please enter actuals manually.');
-    } finally {
-      setSyncing(false);
-    }
   };
 
   const handleClearYear = async () => {
@@ -72,7 +50,7 @@ export default function Accounting() {
     <Box>
       <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 2 }}>
         <Typography variant="h5">
-          Section 3: Accounting Operating Statement
+          Section 2: Cost Forecast
         </Typography>
         <Box sx={{ display: 'flex', gap: 2 }}>
           {canEdit && (
@@ -90,14 +68,6 @@ export default function Accounting() {
                 fiscalYear={fiscalYear}
                 onImportComplete={() => setRefreshKey(k => k + 1)}
               />
-              <Button
-                variant="outlined"
-                startIcon={<SyncIcon />}
-                onClick={handleQBSync}
-                disabled={syncing}
-              >
-                {syncing ? 'Syncing...' : 'QB Sync'}
-              </Button>
             </>
           )}
           <ExportButtons farmId={currentFarm.id} fiscalYear={fiscalYear} />

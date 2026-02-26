@@ -15,23 +15,23 @@ export default function CashFlowSummary({ summary, months }) {
 
   return (
     <Box sx={{ mt: 3 }}>
-      <Typography variant="h6" sx={{ mb: 2 }}>Monthly Cash Flow Summary</Typography>
+      <Typography variant="h6" sx={{ mb: 2 }}>Monthly Expense Summary</Typography>
       <Grid container spacing={1}>
         {displayMonths.map(month => {
           const s = summary[month] || {};
-          const isPositive = (s.profit ?? s.operatingIncome ?? 0) >= 0;
+          const expense = s.totalExpense || 0;
           return (
             <Grid item xs={6} sm={3} md={2} lg={1} key={month}>
               <Card
                 sx={{
-                  bgcolor: isPositive ? colors.cashFlowPositiveBg : colors.cashFlowNegativeBg,
-                  border: `1px solid ${isPositive ? colors.cashFlowPositiveBorder : colors.cashFlowNegativeBorder}`,
+                  bgcolor: colors.cashFlowNegativeBg,
+                  border: `1px solid ${colors.cashFlowNegativeBorder}`,
                 }}
               >
                 <CardContent sx={{ p: 1, '&:last-child': { pb: 1 } }}>
                   <Typography variant="caption" color="text.secondary">{month}</Typography>
-                  <Typography variant="body2" fontWeight="bold" color={isPositive ? 'success.main' : 'error.main'}>
-                    {formatCurrency(s.profit ?? s.operatingIncome ?? 0, 0)}
+                  <Typography variant="body2" fontWeight="bold" color="text.primary">
+                    {formatCurrency(expense, 0)}
                   </Typography>
                 </CardContent>
               </Card>

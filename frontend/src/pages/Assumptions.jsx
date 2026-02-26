@@ -16,7 +16,7 @@ export default function Assumptions() {
   return (
     <Box>
       <Typography variant="h5" sx={{ mb: 2 }}>
-        Section 1: Assumptions & Budget Setup
+        Section 1: Yield & Assumptions
       </Typography>
       <Paper sx={{ p: 3 }}>
         <AssumptionsForm farmId={currentFarm.id} fiscalYear={fiscalYear} />

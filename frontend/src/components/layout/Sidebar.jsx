@@ -11,9 +11,9 @@ import AdminPanelSettingsIcon from '@mui/icons-material/AdminPanelSettings';
 import { useFarm } from '../../contexts/FarmContext';
 
 const NAV_ITEMS = [
-  { label: '1. Assumptions', path: '/assumptions', icon: <SettingsIcon /> },
-  { label: '2. Per-Unit', path: '/per-unit', icon: <TableChartIcon /> },
-  { label: '3. Accounting', path: '/accounting', icon: <AccountBalanceIcon /> },
+  { label: '1. Yield & Assumptions', path: '/assumptions', icon: <SettingsIcon /> },
+  { label: '2. Cost Forecast', path: '/cost-forecast', icon: <AccountBalanceIcon /> },
+  { label: '3. Per-Unit', path: '/per-unit', icon: <TableChartIcon /> },
   { label: '4. Dashboard', path: '/dashboard', icon: <DashboardIcon /> },
   { label: 'Chart of Accounts', path: '/chart-of-accounts', icon: <ListAltIcon /> },
 ];

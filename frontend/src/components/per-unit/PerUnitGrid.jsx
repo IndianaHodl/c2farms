@@ -17,7 +17,6 @@ export default function PerUnitGrid({ farmId, fiscalYear }) {
   const [startMonth, setStartMonth] = useState('Nov');
   const [isFrozen, setIsFrozen] = useState(false);
   const [error, setError] = useState('');
-  const [revenueWarning, setRevenueWarning] = useState('');
   const gridRef = useRef();
   const { mode } = useThemeMode();
   const { canEdit } = useFarm();
@@ -218,7 +217,6 @@ export default function PerUnitGrid({ farmId, fiscalYear }) {
   return (
     <Box>
       {error && <Alert severity="error" sx={{ mb: 1 }} onClose={() => setError('')}>{error}</Alert>}
-      {revenueWarning && <Alert severity="warning" sx={{ mb: 1 }}>{revenueWarning}</Alert>}
       <div className={gridTheme} style={{ height: 700, width: '100%' }}>
         <AgGridReact
           ref={gridRef}
