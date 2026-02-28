@@ -18,13 +18,14 @@ import chartOfAccountsRoutes from './routes/chartOfAccounts.js';
 import settingsRoutes from './routes/settings.js';
 import aiRoutes from './routes/ai.js';
 import operationalDataRoutes from './routes/operationalData.js';
+import inventoryRoutes from './routes/inventory.js';
 import { errorHandler } from './middleware/errorHandler.js';
 import { authenticate, requireFarmAccess } from './middleware/auth.js';
 
 const app = express();
 
-// Security headers
-app.use(helmet());
+// Security headers — disable CSP so the React SPA can load inline scripts/styles
+app.use(helmet({ contentSecurityPolicy: false }));
 
 // CORS — lock down in production via CORS_ORIGIN env var
 const corsOrigin = process.env.CORS_ORIGIN
@@ -83,6 +84,7 @@ app.use('/api/farms', chartOfAccountsRoutes);
 app.use('/api/farms', settingsRoutes);
 app.use('/api/farms', aiRoutes);
 app.use('/api/farms', operationalDataRoutes);
+app.use('/api/farms', inventoryRoutes);
 
 app.get('/api/health', (_req, res) => {
   res.json({ status: 'ok', timestamp: new Date().toISOString() });

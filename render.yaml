@@ -1,0 +1,27 @@
+databases:
+  - name: c2farms-db
+    plan: free
+    databaseName: c2farms
+    user: c2farms
+
+services:
+  - type: web
+    name: c2farms
+    plan: free
+    runtime: node
+    buildCommand: cd frontend && npm install && npm run build && cd ../backend && npm install && npx prisma generate --schema=src/prisma/schema.prisma
+    startCommand: cd backend && npx prisma db push --schema=src/prisma/schema.prisma && node src/server.js
+    healthCheckPath: /api/health
+    envVars:
+      - key: DATABASE_URL
+        fromDatabase:
+          name: c2farms-db
+          property: connectionString
+      - key: JWT_SECRET
+        generateValue: true
+      - key: NODE_ENV
+        value: production
+      - key: CORS_ORIGIN
+        value: ""
+      - key: FRONTEND_URL
+        value: ""

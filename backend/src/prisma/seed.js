@@ -400,6 +400,81 @@ async function main() {
   }
   console.log('Seeded prior year (FY2025) data');
 
+  // ============ Inventory Module ============
+  console.log('Seeding inventory locations and conversions...');
+
+  const inventoryLocations = [
+    { name: 'Lewvan', location_type: 'production', sort_order: 1 },
+    { name: 'Hyas', location_type: 'production', sort_order: 2 },
+    { name: 'Balcarres', location_type: 'production', sort_order: 3 },
+    { name: 'Stockholm', location_type: 'production', sort_order: 4 },
+    { name: 'Ridgedale', location_type: 'production', sort_order: 5 },
+    { name: 'Waldron', location_type: 'satellite', sort_order: 6 },
+    { name: 'LGX', location_type: 'transit', sort_order: 7 },
+    { name: 'Ogema', location_type: 'transit', sort_order: 8 },
+  ];
+
+  const locationMap = {};
+  for (const loc of inventoryLocations) {
+    const created = await prisma.inventoryLocation.upsert({
+      where: { farm_id_name: { farm_id: farm.id, name: loc.name } },
+      update: { location_type: loc.location_type, sort_order: loc.sort_order },
+      create: { farm_id: farm.id, ...loc },
+    });
+    locationMap[loc.name] = created;
+  }
+  console.log(`Seeded ${inventoryLocations.length} inventory locations`);
+
+  // Commodity conversion factors (lbs per bushel)
+  const conversions = [
+    { commodity: 'Barley', lbs_per_bu: 48 },
+    { commodity: 'Canary', lbs_per_bu: 56 },
+    { commodity: 'Canola', lbs_per_bu: 50 },
+    { commodity: 'Canola - L358', lbs_per_bu: 50 },
+    { commodity: 'Canola - Nexera', lbs_per_bu: 50 },
+    { commodity: 'Chickpeas', lbs_per_bu: 60 },
+    { commodity: 'Durum', lbs_per_bu: 60 },
+    { commodity: 'Fertilizer', lbs_per_bu: 56 },
+    { commodity: 'Lentils SG', lbs_per_bu: 60 },
+    { commodity: 'Lentils SR', lbs_per_bu: 60 },
+    { commodity: 'Spring Wheat', lbs_per_bu: 60 },
+    { commodity: 'Yellow Peas', lbs_per_bu: 60 },
+  ];
+
+  for (const c of conversions) {
+    await prisma.commodityConversion.upsert({
+      where: { farm_id_commodity: { farm_id: farm.id, commodity: c.commodity } },
+      update: { lbs_per_bu: c.lbs_per_bu },
+      create: { farm_id: farm.id, ...c },
+    });
+  }
+  console.log(`Seeded ${conversions.length} commodity conversions`);
+
+  // Sample bins at Balcarres with Oct snapshot
+  const balcarres = locationMap['Balcarres'];
+  const sampleBins = [
+    { bin_number: '201', bin_type: 'Hopper', size_bu: 5000, commodity: 'Canola', bushels: 4000 },
+    { bin_number: '202', bin_type: 'Hopper', size_bu: 5000, commodity: 'Durum', bushels: 3500 },
+    { bin_number: '203', bin_type: 'Flat Bottom', size_bu: 18000, commodity: 'Lentils SG #1', bushels: 12000 },
+  ];
+
+  for (const sb of sampleBins) {
+    const bin = await prisma.inventoryBin.upsert({
+      where: { farm_id_location_id_bin_number: { farm_id: farm.id, location_id: balcarres.id, bin_number: sb.bin_number } },
+      update: { bin_type: sb.bin_type, size_bu: sb.size_bu },
+      create: { farm_id: farm.id, location_id: balcarres.id, bin_number: sb.bin_number, bin_type: sb.bin_type, size_bu: sb.size_bu },
+    });
+    // Oct 31 snapshot
+    const lbsPerBu = 60; // default for most grains
+    const kg = sb.bushels * lbsPerBu * 0.45359237;
+    await prisma.inventorySnapshot.upsert({
+      where: { farm_id_bin_id_snapshot_date: { farm_id: farm.id, bin_id: bin.id, snapshot_date: new Date('2025-10-31') } },
+      update: { commodity: sb.commodity, bushels: sb.bushels, kg, crop_year: 2025 },
+      create: { farm_id: farm.id, bin_id: bin.id, snapshot_date: new Date('2025-10-31'), commodity: sb.commodity, bushels: sb.bushels, kg, crop_year: 2025 },
+    });
+  }
+  console.log('Seeded sample bins and Oct snapshots at Balcarres');
+
   console.log('\n--- Seed Complete ---');
   console.log(`Admin:   farmer@c2farms.com / password123`);
   console.log(`Manager: manager@c2farms.com / password123`);
