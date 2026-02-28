@@ -10,7 +10,6 @@ import Dashboard from './pages/Dashboard';
 import OperationalData from './pages/OperationalData';
 import ChartOfAccounts from './pages/ChartOfAccounts';
 import Settings from './pages/Settings';
-import Inventory from './pages/Inventory';
 import ErrorBoundary from './components/shared/ErrorBoundary';
 import { Typography, Box } from '@mui/material';
 
@@ -63,7 +62,6 @@ export default function App() {
                       <Route path="/accounting" element={<Navigate to="/cost-forecast" />} />
                       <Route path="/operations" element={<OperationalData />} />
                       <Route path="/dashboard" element={<Dashboard />} />
-                      <Route path="/inventory" element={<Inventory />} />
                       <Route path="/chart-of-accounts" element={<ChartOfAccounts />} />
                       <Route path="/settings" element={<AdminRoute><Settings /></AdminRoute>} />
                       <Route path="*" element={<NotFound />} />

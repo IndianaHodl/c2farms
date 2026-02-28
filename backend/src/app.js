@@ -18,7 +18,7 @@ import chartOfAccountsRoutes from './routes/chartOfAccounts.js';
 import settingsRoutes from './routes/settings.js';
 import aiRoutes from './routes/ai.js';
 import operationalDataRoutes from './routes/operationalData.js';
-import inventoryRoutes from './routes/inventory.js';
+
 import { errorHandler } from './middleware/errorHandler.js';
 import { authenticate, requireFarmAccess } from './middleware/auth.js';
 
@@ -84,7 +84,6 @@ app.use('/api/farms', chartOfAccountsRoutes);
 app.use('/api/farms', settingsRoutes);
 app.use('/api/farms', aiRoutes);
 app.use('/api/farms', operationalDataRoutes);
-app.use('/api/farms', inventoryRoutes);
 
 app.get('/api/health', (_req, res) => {
   res.json({ status: 'ok', timestamp: new Date().toISOString() });

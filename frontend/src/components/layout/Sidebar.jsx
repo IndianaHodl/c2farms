@@ -9,7 +9,6 @@ import DashboardIcon from '@mui/icons-material/Dashboard';
 import ListAltIcon from '@mui/icons-material/ListAlt';
 import PrecisionManufacturingIcon from '@mui/icons-material/PrecisionManufacturing';
 import AdminPanelSettingsIcon from '@mui/icons-material/AdminPanelSettings';
-import WarehouseIcon from '@mui/icons-material/Warehouse';
 import { useFarm } from '../../contexts/FarmContext';
 
 const NAV_ITEMS = [
@@ -18,7 +17,6 @@ const NAV_ITEMS = [
   { label: '3. Per-Unit', path: '/per-unit', icon: <TableChartIcon /> },
   { label: '4. Operations', path: '/operations', icon: <PrecisionManufacturingIcon /> },
   { label: '5. Dashboard', path: '/dashboard', icon: <DashboardIcon /> },
-  { label: '6. Inventory', path: '/inventory', icon: <WarehouseIcon /> },
   { label: 'Chart of Accounts', path: '/chart-of-accounts', icon: <ListAltIcon /> },
 ];
 
