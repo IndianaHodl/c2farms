@@ -1,13 +1,11 @@
 databases:
   - name: c2farms-db
-    plan: free
     databaseName: c2farms
     user: c2farms
 
 services:
   - type: web
     name: c2farms
-    plan: free
     runtime: node
     buildCommand: cd frontend && npm install && npm run build && cd ../backend && npm install && npx prisma generate --schema=src/prisma/schema.prisma
     startCommand: cd backend && npx prisma db push --schema=src/prisma/schema.prisma && node src/server.js
